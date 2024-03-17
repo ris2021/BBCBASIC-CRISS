@@ -1,0 +1,111 @@
+   1:				        TITLE   BBC BASIC (C) R.T.RUSSELL 1984
+   2:				;
+   3:				;RAM MODULE FOR BBC BASIC INTERPRETER
+   4:				;FOR USE WITH VERSION 2.0 OF BBC BASIC
+   5:				;*STANDARD CP/M DISTRIBUTION VERSION*
+   6:				;(C) COPYRIGHT R.T.RUSSELL 31-12-1983
+   7:				;
+   8:				        GLOBAL  ACCS
+   9:				        GLOBAL  BUFFER
+  10:				        GLOBAL  LINENO
+  11:				        GLOBAL  TOP
+  12:				        GLOBAL  PAGE
+  13:				        GLOBAL  LOMEM
+  14:				        GLOBAL  FREE
+  15:				        GLOBAL  HIMEM
+  16:				        GLOBAL  RANDOM
+  17:				        GLOBAL  COUNT
+  18:				        GLOBAL  WIDTH
+  19:				        GLOBAL  ERL
+  20:				        GLOBAL  ERR
+  21:				        GLOBAL  ERRTRP
+  22:				        GLOBAL  ERRTXT
+  23:				        GLOBAL  TRACEN
+  24:				        GLOBAL  AUTONO
+  25:				        GLOBAL  INCREM
+  26:				        GLOBAL  LISTON
+  27:				        GLOBAL  DATPTR
+  28:				        GLOBAL  FNPTR
+  29:				        GLOBAL  PROPTR
+  30:				        GLOBAL  STAVAR
+  31:				        GLOBAL  OC
+  32:				        GLOBAL  PC
+  33:				        GLOBAL  DYNVAR
+  34:				        GLOBAL  ERRLIN
+  35:				        GLOBAL  USER
+  36:				;
+  37:				;n.b. ACCS, BUFFER & STAVAR must be on page boundaries.
+  38:				;
+  39:     -	0000'         	ACCS:   DEFS    256             ;STRING ACCUMULATOR
+  40:     -	0100'         	BUFFER: DEFS    256             ;STRING INPUT BUFFER
+  41:     -	0200'         	STAVAR: DEFS    27*4            ;STATIC VARIABLES
+  42:     -	023C'         	OC      EQU     STAVAR+15*4     ;CODE ORIGIN (O%)
+  43:     -	0240'         	PC      EQU     STAVAR+16*4     ;PROGRAM COUNTER (P%)
+  44:     -	026C'         	DYNVAR: DEFS    54*2            ;DYN. VARIABLE POINTERS
+  45:     -	02D8'         	FNPTR:  DEFS    2               ;DYN. FUNCTION POINTER
+  46:     -	02DA'         	PROPTR: DEFS    2               ;DYN. PROCEDURE POINTER
+  47:				;
+  48:     -	02DC'         	PAGE:   DEFS    2               ;START OF USER PROGRAM
+  49:     -	02DE'         	TOP:    DEFS    2               ;FIRST LOCN AFTER PROG.
+  50:     -	02E0'         	LOMEM:  DEFS    2               ;START OF DYN. STORAGE
+  51:     -	02E2'         	FREE:   DEFS    2               ;FIRST FREE-SPACE BYTE
+  52:     -	02E4'         	HIMEM:  DEFS    2               ;FIRST PROTECTED BYTE
+  53:				;
+  54:     -	02E6'         	LINENO: DEFS    2               ;LINE NUMBER
+  55:     -	02E8'         	TRACEN: DEFS    2               ;TRACE FLAG
+  56:     -	02EA'         	AUTONO: DEFS    2               ;AUTO FLAG
+  57:     -	02EC'         	ERRTRP: DEFS    2               ;ERROR TRAP
+  58:     -	02EE'         	ERRTXT: DEFS    2               ;ERROR MESSAGE POINTER
+  59:     -	02F0'         	DATPTR: DEFS    2               ;DATA POINTER
+  60:     -	02F2'         	ERL:    DEFS    2               ;ERROR LINE
+  61:     -	02F4'         	ERRLIN: DEFS    2               ;"ON ERROR" LINE
+  62:     -	02F6'         	RANDOM: DEFS    5               ;RANDOM NUMBER
+  63:     -	02FB'         	COUNT:  DEFS    1               ;PRINT POSITION
+  64:     -	02FC'         	WIDTH:  DEFS    1               ;PRINT WIDTH
+  65:     -	02FD'         	ERR:    DEFS    1               ;ERROR NUMBER
+  66:     -	02FE'         	LISTON: DEFS    1               ;LISTO & OPT FLAG
+  67:     -	02FF'         	INCREM: DEFS    1               ;AUTO INCREMENT
+  68:				;
+  69:     -	0300'         	USER:   END
+
+
+
+Statistics:
+
+     3	passes
+     0	jr promotions
+    28	symbols
+     0	bytes
+
+
+
+Symbol Table:
+
+ACCS            00'       0 (public)
+AUTONO           2EA'     746 (public)
+BUFFER           100'     256 (public)
+COUNT            2FB'     763 (public)
+DATPTR           2F0'     752 (public)
+DYNVAR           26C'     620 (public)
+ERL              2F2'     754 (public)
+ERR              2FD'     765 (public)
+ERRLIN           2F4'     756 (public)
+ERRTRP           2EC'     748 (public)
+ERRTXT           2EE'     750 (public)
+FNPTR            2D8'     728 (public)
+FREE             2E2'     738 (public)
+HIMEM            2E4'     740 (public)
+INCREM           2FF'     767 (public)
+LINENO           2E6'     742 (public)
+LISTON           2FE'     766 (public)
+LOMEM            2E0'     736 (public)
+OC             = 23C'     572 (public)
+PAGE             2DC'     732 (public)
+PC             = 240'     576 (public)
+PROPTR           2DA'     730 (public)
+RANDOM           2F6'     758 (public)
+STAVAR           200'     512 (public)
+TOP              2DE'     734 (public)
+TRACEN           2E8'     744 (public)
+USER             300'     768 (public)
+WIDTH            2FC'     764 (public)

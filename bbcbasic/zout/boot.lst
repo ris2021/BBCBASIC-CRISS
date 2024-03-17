@@ -1,0 +1,150 @@
+   1:				; WP2450DS main program.
+   2:				
+   3:				; This is a completely generic ADM3a machine.
+   4:				
+   5:				    
+   6:				        aseg
+   7:     -	0100          	        org 0x100
+   8:				
+   9:				        extrn START
+  10:				
+  11:     -	0005          	BDOS    equ 5
+  12:				
+  13:				; Initial startup.
+  14:				
+  15:     -	0100  C30000  	        jp START
+  16:				
+  17:				; BYE: exit to CP/M
+  18:				
+  19:				        global BYE
+  20:     -	0000          	BYE     equ 0
+  21:				
+  22:				; CLRSCN: clears the screen.
+  23:				
+  24:				        global CLRSCN
+  25:     -	0103          	CLRSCN:
+  26:     -	0103  C5      	        push bc
+  27:     -	0104  0E02    	        ld c, 2
+  28:     -	0106  1E0C    	        ld e, 12
+  29:     -	0108  CD0500  	        call BDOS
+  30:     -	010B  C1      	        pop bc
+  31:     -	010C  C9      	        ret
+  32:				
+  33:				; PUTIME: set current time to DE:HL, in centiseconds.
+  34:				      
+  35:				        global PUTIME
+  36:     -	010D          	PUTIME:
+  37:     -	010D  C9      	        ret
+  38:				
+  39:				; GETIME: return current time in DE:HL, in centiseconds.
+  40:				
+  41:				        global GETIME
+  42:     -	010E          	GETIME:
+  43:     -	010E  110000  	        ld de, 0
+  44:     -	0111  210000  	        ld hl, 0
+  45:     -	0114  C9      	        ret
+  46:				
+  47:				; PUTCSR: move to cursor to x=DE, y=HL
+  48:				
+  49:				        global PUTCSR
+  50:     -	0115          	PUTCSR:
+  51:     -	0115  C5      	        push bc
+  52:     -	0116  D5      	        push de
+  53:     -	0117  E5      	        push hl
+  54:     -	0118  0E02    	        ld c, 2
+  55:     -	011A  1E1B    	        ld e, 0x1b
+  56:     -	011C  CD0500  	        call BDOS
+  57:     -	011F  0E02    	        ld c, 2
+  58:     -	0121  1E3D    	        ld e, '='
+  59:     -	0123  CD0500  	        call BDOS
+  60:     -	0126  E1      	        pop hl
+  61:     -	0127  0E02    	        ld c, 2
+  62:     -	0129  3E20    	        ld a, 32
+  63:     -	012B  85      	        add l
+  64:     -	012C  5F      	        ld e, a
+  65:     -	012D  CD0500  	        call BDOS
+  66:     -	0130  E1      	        pop hl
+  67:     -	0131  0E02    	        ld c, 2
+  68:     -	0133  3E20    	        ld a, 32
+  69:     -	0135  85      	        add l
+  70:     -	0136  5F      	        ld e, a
+  71:     -	0137  CD0500  	        call BDOS
+  72:     -	013A  C1      	        pop bc
+  73:     -	013B  C9      	        ret
+  74:				
+  75:				; GETCSR: return cursor position in x=DE, y=HL
+  76:				
+  77:				        global GETCSR
+  78:     -	013C          	GETCSR:
+  79:     -	013C  110000  	        ld de, 0
+  80:     -	013F  210000  	        ld hl, 0
+  81:     -	0142  C9      	        ret
+  82:				
+  83:				; GETKEY: return key with timeout
+  84:				; HL = time to wait in centiseconds
+  85:				; Returns C if character recieved, with character in A
+  86:				; Returns !C if timeout
+  87:				
+  88:				        global GETKEY
+  89:     -	0143          	GETKEY:
+  90:     -	0143  C5      	        push bc
+  91:     -	0144          	.1
+  92:     -	0144  0E06    	        ld c, 6                 ; poll character
+  93:     -	0146  1EFF    	        ld e, 0xff
+  94:     -	0148  CD0500  	        call BDOS
+  95:     -	014B  B7      	        or a
+  96:     -	014C  28F6    	        jr z, .1                ; repeat if no character
+  97:     -	014E  37      	        scf                     ; set carry
+  98:     -	014F  C1      	        pop bc
+  99:     -	0150  C9      	        ret
+ 100:				
+ 101:				; Edit key table, which must be at 0x01F4
+ 102:				
+ 103:     -	0000          	        if $ > 0x1f4
+ 105:				        endif
+ 106:				
+ 107:     -	01F4          	        org     0x01f4
+ 108:     -	01F4  50      	        defb    80              ;WIDTH
+ 109:     -	01F5  05      	        defb    5               ;CURSOR UP
+ 110:     -	01F6  18      	        defb    24              ;CURSOR DOWN
+ 111:     -	01F7  1A      	        defb    26              ;START OF LINE
+ 112:     -	01F8  17      	        defb    23              ;END OF LINE
+ 113:     -	01F9  14      	        defb    20              ;DELETE TO END OF LINE
+ 114:     -	01FA  08      	        defb    8               ;BACKSPACE & DELETE
+ 115:     -	01FB  19      	        defb    25              ;CANCEL LINE
+ 116:     -	01FC  13      	        defb    19              ;CURSOR LEFT
+ 117:     -	01FD  04      	        defb    4               ;CURSOR RIGHT
+ 118:     -	01FE  07      	        defb    7               ;DELETE CHARACTER
+ 119:     -	01FF  16      	        defb    22              ;INSERT CHARACTER
+ 120:				
+ 121:     -	0000          	        if $ != 0x200
+ 123:				        endif
+ 124:				;;
+ 125:				;FIN:    END
+ 126:				
+ 127:				; vim: ts=8 sw=8 et ft=asm
+ 128:				
+
+
+
+Statistics:
+
+     3	passes
+     0	jr promotions
+    10	symbols
+    93	bytes
+
+
+
+Symbol Table:
+
+.1               144      324
+BDOS           =05        5
+BYE            =00        0 (public)
+CLRSCN           103      259 (public)
+GETCSR           13C      316 (public)
+GETIME           10E      270 (public)
+GETKEY           143      323 (public)
+PUTCSR           115      277 (public)
+PUTIME           10D      269 (public)
+START           00        0 (extern)

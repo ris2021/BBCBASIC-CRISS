@@ -1,0 +1,2371 @@
+   1:				        TITLE   BBC BASIC (C) R.T.RUSSELL 1987
+   2:				;
+   3:				;BBC BASIC INTERPRETER - Z80 VERSION
+   4:				;COMMAND, ERROR AND LEXICAL ANALYSIS MODULE - "MAIN"
+   5:				;(C) COPYRIGHT  R.T.RUSSELL  1984
+   6:				;VERSION 2.3, 07-05-1984
+   7:				;VERSION 3.0, 01-03-1987
+   8:				;
+   9:				        EXTRN   XEQ
+  10:				        EXTRN   RUN0
+  11:				        EXTRN   CHAIN0
+  12:				        EXTRN   TERM?
+  13:				        EXTRN   MUL16
+  14:				        EXTRN   X4OR5
+  15:				        EXTRN   FILL
+  16:				        EXTRN   ESCAPE
+  17:				        EXTRN   CHECK
+  18:				        EXTRN   SEARCH
+  19:				;
+  20:				        EXTRN   OSWRCH
+  21:				        EXTRN   OSLINE
+  22:				        EXTRN   OSINIT
+  23:				        EXTRN   OSLOAD
+  24:				        EXTRN   OSSAVE
+  25:				        EXTRN   OSBGET
+  26:				        EXTRN   OSBPUT
+  27:				        EXTRN   OSSHUT
+  28:				        EXTRN   OSSTAT
+  29:				        EXTRN   PROMPT
+  30:				        EXTRN   LTRAP
+  31:				        EXTRN   OSCLI
+  32:				        EXTRN   RESET
+  33:				;
+  34:				        EXTRN   COMMA
+  35:				        EXTRN   BRAKET
+  36:				        EXTRN   NXT
+  37:				        EXTRN   ZERO
+  38:				        EXTRN   ITEMI
+  39:				        EXTRN   EXPRI
+  40:				        EXTRN   EXPRS
+  41:				        EXTRN   DECODE
+  42:				        EXTRN   LOADN
+  43:				        EXTRN   SFIX
+  44:				;
+  45:				        GLOBAL  START
+  46:				        GLOBAL  OUTCHR
+  47:				        GLOBAL  OUT
+  48:				        GLOBAL  ERROR
+  49:				        GLOBAL  EXTERR
+  50:				        GLOBAL  REPORT
+  51:				        GLOBAL  CLOOP
+  52:				        GLOBAL  WARM
+  53:				        GLOBAL  NEW
+  54:				        GLOBAL  OLD
+  55:				        GLOBAL  LOAD
+  56:				        GLOBAL  SAVE
+  57:				        GLOBAL  RENUM
+  58:				        GLOBAL  AUTO
+  59:				        GLOBAL  CLEAR
+  60:				        GLOBAL  CRLF
+  61:				        GLOBAL  SAYLN
+  62:				        GLOBAL  LOAD0
+  63:				        GLOBAL  TELL
+  64:				        GLOBAL  FINDL
+  65:				        GLOBAL  SETLIN
+  66:				        GLOBAL  LIST
+  67:				        GLOBAL  DELETE
+  68:				        GLOBAL  GETVAR
+  69:				        GLOBAL  PUTVAR
+  70:				        GLOBAL  GETDEF
+  71:				        GLOBAL  CREATE
+  72:				        GLOBAL  PBCDL
+  73:				        GLOBAL  LEXAN2
+  74:				        GLOBAL  RANGE
+  75:				;
+  76:				        EXTRN   PAGE
+  77:				        EXTRN   ACCS
+  78:				        EXTRN   BUFFER
+  79:				        EXTRN   LINENO
+  80:				        EXTRN   LOMEM
+  81:				        EXTRN   HIMEM
+  82:				        EXTRN   COUNT
+  83:				        EXTRN   WIDTH
+  84:				        EXTRN   TOP
+  85:				        EXTRN   FREE
+  86:				        EXTRN   STAVAR
+  87:				        EXTRN   DYNVAR
+  88:				        EXTRN   ERRTXT
+  89:				        EXTRN   ERR
+  90:				        EXTRN   ERL
+  91:				        EXTRN   ERRLIN
+  92:				        EXTRN   ERRTRP
+  93:				        EXTRN   FNPTR
+  94:				        EXTRN   PROPTR
+  95:				        EXTRN   AUTONO
+  96:				        EXTRN   INCREM
+  97:				        EXTRN   LISTON
+  98:				        EXTRN   TRACEN
+  99:				;
+ 100:     -	0085'         	TERROR  EQU     85H
+ 101:     -	0086'         	LINE    EQU     86H
+ 102:     -	008B'         	ELSE    EQU     8BH
+ 103:     -	008C'         	THEN    EQU     8CH
+ 104:     -	008D'         	LINO    EQU     8DH
+ 105:     -	00A4'         	FN      EQU     0A4H
+ 106:     -	00B8'         	TO      EQU     0B8H
+ 107:     -	00CC'         	REN     EQU     0CCH
+ 108:     -	00DC'         	DATA    EQU     0DCH
+ 109:     -	00DE'         	DIM     EQU     0DEH
+ 110:     -	00E3'         	FOR     EQU     0E3H
+ 111:     -	00E4'         	GOSUB   EQU     0E4H
+ 112:     -	00E5'         	GOTO    EQU     0E5H
+ 113:     -	00E7'         	TIF     EQU     0E7H
+ 114:     -	00EA'         	LOCAL   EQU     0EAH
+ 115:     -	00ED'         	NEXT    EQU     0EDH
+ 116:     -	00EE'         	ON      EQU     0EEH
+ 117:     -	00F2'         	PROC    EQU     0F2H
+ 118:     -	00F4'         	REM     EQU     0F4H
+ 119:     -	00F5'         	REPEAT  EQU     0F5H
+ 120:     -	00F7'         	RESTOR  EQU     0F7H
+ 121:     -	00FC'         	TRACE   EQU     0FCH
+ 122:     -	00FD'         	UNTIL   EQU     0FDH
+ 123:				;
+ 124:     -	008F'         	TOKLO   EQU     8FH
+ 125:     -	0093'         	TOKHI   EQU     93H
+ 126:     -	0040'         	OFFSET  EQU     0CFH-TOKLO
+ 127:				;
+ 128:    0+10	0000' C32A00  	START:  JP      COLD
+ 129:   10+10	0003' C39A00  	        JP      WARM
+ 130:   20+10	0006' C30000  	        JP      ESCAPE
+ 131:   30+10	0009' C31C07  	        JP      EXTERR
+ 132:   40+10	000C' C3570C  	        JP      TELL
+ 133:   50+10	000F' C34E0C  	        JP      TEXT
+ 134:   60+10	0012' C3D407  	        JP      SETTOP
+ 135:   70+10	0015' C3F807  	        JP      CLEAR
+ 136:   80+10	0018' C30000  	        JP      RUN0
+ 137:   90+10	001B' C30000  	        JP      OSCLI
+ 138:  100+10	001E' C30000  	        JP      OSBGET
+ 139:  110+10	0021' C30000  	        JP      OSBPUT
+ 140:  120+10	0024' C30000  	        JP      OSSTAT
+ 141:  130+10	0027' C30000  	        JP      OSSHUT
+ 142:  140+10	002A' 210000  	COLD:   LD      HL,STAVAR       ;COLD START
+ 143:  150+6	002D' F9      	        LD      SP,HL
+ 144:  156+10	002E' 360A    	        LD      (HL),10
+ 145:  166+4	0030' 2C      	        INC     L
+ 146:  170+10	0031' 3609    	        LD      (HL),9
+ 147:  180+4	0033' 2C      	        INC     L
+ 148:  184+4	0034' AF      	        XOR     A
+ 149:  188+7	0035' 77      	PURGE:  LD      (HL),A          ;CLEAR SCRATCHPAD
+ 150:  195+4	0036' 2C      	        INC     L
+ 151:  199+7+5	0037' 20FC    	        JR      NZ,PURGE
+ 152:  206+7	0039' 3E37    	        LD      A,37H           ;V3.0
+ 153:  213+13	003B' 320000  	        LD      (LISTON),A
+ 154:  226+10	003E' 217900  	        LD      HL,NOTICE
+ 155:  236+16	0041' 220000  	        LD      (ERRTXT),HL
+ 156:  252+17	0044' CD0000  	        CALL    OSINIT
+ 157:  269+20	0047' ED530000	        LD      (HIMEM),DE
+ 158:  289+16	004B' 220000  	        LD      (PAGE),HL
+ 159:  305+17	004E' CDF007  	        CALL    NEWIT
+ 160:  322+10	0051' C20000  	        JP      NZ,CHAIN0       ;AUTO-RUN
+ 161:  332+17	0054' CD570C  	        CALL    TELL
+ 162:     -	0057' 42424320	        DEFM    'BBC BASIC (Z80) Version 3.00+1  '
+	              42415349
+	              4320285A
+	              38302920
+	              56657273
+	              696F6E20
+	              332E3030
+	              2B312020
+ 163:     -	0077' 0D      	        DEFB    CR
+ 164:     -	0078' 0A      	        DEFB    LF
+ 165:     -	0079' 28432920	NOTICE: DEFM    '(C) Copyright R.T.Russell 1987'
+	              436F7079
+	              72696768
+	              7420522E
+	              542E5275
+	              7373656C
+	              6C203139
+	              3837
+ 166:     -	0097' 0D      	        DEFB    CR
+ 167:     -	0098' 0A      	        DEFB    LF
+ 168:     -	0099' 00      	        DEFB    0
+ 169:     -	009A' F6      	WARM:   DEFB    0F6H
+ 170:  349+4	009B' 37      	CLOOP:  SCF
+ 171:  353+20	009C' ED7B0000	        LD      SP,(HIMEM)
+ 172:  373+17	00A0' CD0000  	        CALL    PROMPT          ;PROMPT USER
+ 173:  390+10	00A3' 210000  	        LD      HL,LISTON
+ 174:  400+7	00A6' 7E      	        LD      A,(HL)
+ 175:  407+7	00A7' E60F    	        AND     0FH             ;LISTO
+ 176:  414+7	00A9' F630    	        OR      30H             ;OPT 3
+ 177:  421+7	00AB' 77      	        LD      (HL),A
+ 178:  428+15	00AC' ED62    	        SBC     HL,HL           ;HL <- 0 (V3.0)
+ 179:  443+16	00AE' 220000  	        LD      (ERRTRP),HL
+ 180:  459+16	00B1' 220000  	        LD      (ERRLIN),HL
+ 181:  475+16	00B4' 2A0000  	        LD      HL,(AUTONO)
+ 182:  491+16	00B7' 220000  	        LD      (LINENO),HL
+ 183:  507+4	00BA' 7C      	        LD      A,H
+ 184:  511+4	00BB' B5      	        OR      L
+ 185:  515+7+5	00BC' 2817    	        JR      Z,NOAUTO
+ 186:  522+11	00BE' E5      	        PUSH    HL
+ 187:  533+17	00BF' CD3109  	        CALL    PBCD            ;AUTO NUMBER
+ 188:  550+10	00C2' E1      	        POP     HL
+ 189:  560+20	00C3' ED4B0000	        LD      BC,(INCREM)
+ 190:  580+7	00C7' 0600    	        LD      B,0
+ 191:  587+11	00C9' 09      	        ADD     HL,BC
+ 192:  598+10	00CA' DA120B  	        JP      C,TOOBIG
+ 193:  608+16	00CD' 220000  	        LD      (AUTONO),HL
+ 194:  624+7	00D0' 3E20    	        LD      A,' '
+ 195:  631+17	00D2' CDA008  	        CALL    OUTCHR
+ 196:  648+10	00D5' 210000  	NOAUTO: LD      HL,ACCS
+ 197:  658+17	00D8' CD0000  	        CALL    OSLINE          ;GET CONSOLE INPUT
+ 198:  675+4	00DB' AF      	        XOR     A
+ 199:  679+13	00DC' 320000  	        LD      (COUNT),A
+ 200:  692+14	00DF' FD210000	        LD      IY,ACCS
+ 201:  706+17	00E3' CDED0A  	        CALL    LINNUM
+ 202:  723+17	00E6' CD0000  	        CALL    NXT
+ 203:  740+4	00E9' 7C      	        LD      A,H
+ 204:  744+4	00EA' B5      	        OR      L
+ 205:  748+7+5	00EB' 2803    	        JR      Z,LNZERO        ;FOR AUTO (NON-MAPPED)
+ 206:  755+16	00ED' 220000  	        LD      (LINENO),HL
+ 207:  771+10	00F0' 110000  	LNZERO: LD      DE,BUFFER
+ 208:  781+7	00F3' 0E01    	        LD      C,1             ;LEFT MODE
+ 209:  788+17	00F5' CD810B  	        CALL    LEXAN2          ;LEXICAL ANALYSIS
+ 210:  805+7	00F8' 12      	        LD      (DE),A          ;TERMINATOR
+ 211:  812+4	00F9' AF      	        XOR     A
+ 212:  816+4	00FA' 47      	        LD      B,A
+ 213:  820+4	00FB' 4B      	        LD      C,E             ;BC=LINE LENGTH
+ 214:  824+6	00FC' 13      	        INC     DE
+ 215:  830+7	00FD' 12      	        LD      (DE),A          ;ZERO NEXT
+ 216:  837+16	00FE' 2A0000  	        LD      HL,(LINENO)
+ 217:  853+4	0101' 7C      	        LD      A,H
+ 218:  857+4	0102' B5      	        OR      L
+ 219:  861+14	0103' FD210000	        LD      IY,BUFFER       ;FOR XEQ
+ 220:  875+10	0107' CA0000  	        JP      Z,XEQ           ;DIRECT MODE
+ 221:  885+11	010A' C5      	        PUSH    BC
+ 222:  896+11	010B' E5      	        PUSH    HL
+ 223:  907+17	010C' CDD407  	        CALL    SETTOP          ;SET TOP
+ 224:  924+10	010F' E1      	        POP     HL
+ 225:  934+17	0110' CDD708  	        CALL    FINDL
+ 226:  951+10+7	0113' CC9407  	        CALL    Z,DEL
+ 227:  961+10	0116' C1      	        POP     BC
+ 228:  971+4	0117' 79      	        LD      A,C
+ 229:  975+4	0118' B7      	        OR      A
+ 230:  979+10	0119' CA9B00  	        JP      Z,CLOOP         ;DELETE LINE ONLY
+ 231:  989+7	011C' C604    	        ADD     A,4
+ 232:  996+4	011E' 4F      	        LD      C,A             ;LENGTH INCLUSIVE
+ 233: 1000+11	011F' D5      	        PUSH    DE              ;LINE NUMBER
+ 234: 1011+11	0120' C5      	        PUSH    BC              ;SAVE LINE LENGTH
+ 235: 1022+4	0121' EB      	        EX      DE,HL
+ 236: 1026+16	0122' 2A0000  	        LD      HL,(TOP)
+ 237: 1042+11	0125' E5      	        PUSH    HL
+ 238: 1053+11	0126' 09      	        ADD     HL,BC
+ 239: 1064+11	0127' E5      	        PUSH    HL
+ 240: 1075+4	0128' 24      	        INC     H
+ 241: 1079+4	0129' AF      	        XOR     A
+ 242: 1083+15	012A' ED72    	        SBC     HL,SP
+ 243: 1098+10	012C' E1      	        POP     HL
+ 244: 1108+10	012D' D20707  	        JP      NC,ERROR        ;"No room"
+ 245: 1118+16	0130' 220000  	        LD      (TOP),HL
+ 246: 1134+19	0133' E3      	        EX      (SP),HL
+ 247: 1153+11	0134' E5      	        PUSH    HL
+ 248: 1164+6	0135' 23      	        INC     HL
+ 249: 1170+4	0136' B7      	        OR      A
+ 250: 1174+15	0137' ED52    	        SBC     HL,DE
+ 251: 1189+4	0139' 44      	        LD      B,H             ;BC=AMOUNT TO MOVE
+ 252: 1193+4	013A' 4D      	        LD      C,L
+ 253: 1197+10	013B' E1      	        POP     HL
+ 254: 1207+10	013C' D1      	        POP     DE
+ 255: 1217+7+5	013D' 2802    	        JR      Z,ATEND
+ 256: 1224+16+5	013F' EDB8    	        LDDR                    ;MAKE SPACE
+ 257: 1240+10	0141' C1      	ATEND:  POP     BC              ;LINE LENGTH
+ 258: 1250+10	0142' D1      	        POP     DE              ;LINE NUMBER
+ 259: 1260+6	0143' 23      	        INC     HL
+ 260: 1266+7	0144' 71      	        LD      (HL),C          ;STORE LENGTH
+ 261: 1273+6	0145' 23      	        INC     HL
+ 262: 1279+7	0146' 73      	        LD      (HL),E          ;STORE LINE NUMBER
+ 263: 1286+6	0147' 23      	        INC     HL
+ 264: 1292+7	0148' 72      	        LD      (HL),D
+ 265: 1299+6	0149' 23      	        INC     HL
+ 266: 1305+10	014A' 110000  	        LD      DE,BUFFER
+ 267: 1315+4	014D' EB      	        EX      DE,HL
+ 268: 1319+4	014E' 0D      	        DEC     C
+ 269: 1323+4	014F' 0D      	        DEC     C
+ 270: 1327+4	0150' 0D      	        DEC     C
+ 271: 1331+16+5	0151' EDB0    	        LDIR                    ;ADD LINE
+ 272: 1347+17	0153' CDC907  	        CALL    CLEAN
+ 273: 1364+10	0156' C39B00  	        JP      CLOOP
+ 275:				;
+ 276:				;LIST OF TOKENS AND KEYWORDS.
+ 277:				;IF A KEYWORD IS FOLLOWED BY NUL THEN IT WILL
+ 278:				; ONLY MATCH WITH THE WORD FOLLOWED IMMEDIATELY
+ 279:				; BY A DELIMITER.
+ 280:				;
+ 281:     -	0159' 80      	KEYWDS: DEFB    80H
+ 282:     -	015A' 414E44  	        DEFM    'AND'
+ 283:     -	015D' 94      	        DEFB    94H
+ 284:     -	015E' 414253  	        DEFM    'ABS'
+ 285:     -	0161' 95      	        DEFB    95H
+ 286:     -	0162' 414353  	        DEFM    'ACS'
+ 287:     -	0165' 96      	        DEFB    96H
+ 288:     -	0166' 41445641	        DEFM    'ADVAL'
+	              4C
+ 289:     -	016B' 97      	        DEFB    97H
+ 290:     -	016C' 415343  	        DEFM    'ASC'
+ 291:     -	016F' 98      	        DEFB    98H
+ 292:     -	0170' 41534E  	        DEFM    'ASN'
+ 293:     -	0173' 99      	        DEFB    99H
+ 294:     -	0174' 41544E  	        DEFM    'ATN'
+ 295:     -	0177' C6      	        DEFB    0C6H
+ 296:     -	0178' 4155544F	        DEFM    'AUTO'
+ 297:     -	017C' 9A      	        DEFB    9AH
+ 298:     -	017D' 42474554	        DEFM    'BGET'
+ 299:     -	0181' 00      	        DEFB    0
+ 300:     -	0182' D5      	        DEFB    0D5H
+ 301:     -	0183' 42505554	        DEFM    'BPUT'
+ 302:     -	0187' 00      	        DEFB    0
+ 303:     -	0188' FB      	        DEFB    0FBH
+ 304:     -	0189' 434F4C4F	        DEFM    'COLOUR'
+	              5552
+ 305:     -	018F' FB      	        DEFB    0FBH
+ 306:     -	0190' 434F4C4F	        DEFM    'COLOR'
+	              52
+ 307:     -	0195' D6      	        DEFB    0D6H
+ 308:     -	0196' 43414C4C	        DEFM    'CALL'
+ 309:     -	019A' D7      	        DEFB    0D7H
+ 310:     -	019B' 43484149	        DEFM    'CHAIN'
+	              4E
+ 311:     -	01A0' BD      	        DEFB    0BDH
+ 312:     -	01A1' 43485224	        DEFM    'CHR$'
+ 313:     -	01A5' D8      	        DEFB    0D8H
+ 314:     -	01A6' 434C4541	        DEFM    'CLEAR'
+	              52
+ 315:     -	01AB' 00      	        DEFB    0
+ 316:     -	01AC' D9      	        DEFB    0D9H
+ 317:     -	01AD' 434C4F53	        DEFM    'CLOSE'
+	              45
+ 318:     -	01B2' 00      	        DEFB    0
+ 319:     -	01B3' DA      	        DEFB    0DAH
+ 320:     -	01B4' 434C47  	        DEFM    'CLG'
+ 321:     -	01B7' 00      	        DEFB    0
+ 322:     -	01B8' DB      	        DEFB    0DBH
+ 323:     -	01B9' 434C53  	        DEFM    'CLS'
+ 324:     -	01BC' 00      	        DEFB    0
+ 325:     -	01BD' 9B      	        DEFB    9BH
+ 326:     -	01BE' 434F53  	        DEFM    'COS'
+ 327:     -	01C1' 9C      	        DEFB    9CH
+ 328:     -	01C2' 434F554E	        DEFM    'COUNT'
+	              54
+ 329:     -	01C7' 00      	        DEFB    0
+ 330:     -	01C8' DC      	        DEFB    0DCH
+ 331:     -	01C9' 44415441	        DEFM    'DATA'
+ 332:     -	01CD' 9D      	        DEFB    9DH
+ 333:     -	01CE' 444547  	        DEFM    'DEG'
+ 334:     -	01D1' DD      	        DEFB    0DDH
+ 335:     -	01D2' 444546  	        DEFM    'DEF'
+ 336:     -	01D5' C7      	        DEFB    0C7H
+ 337:     -	01D6' 44454C45	        DEFM    'DELETE'
+	              5445
+ 338:     -	01DC' 81      	        DEFB    81H
+ 339:     -	01DD' 444956  	        DEFM    'DIV'
+ 340:     -	01E0' DE      	        DEFB    0DEH
+ 341:     -	01E1' 44494D  	        DEFM    'DIM'
+ 342:     -	01E4' DF      	        DEFB    0DFH
+ 343:     -	01E5' 44524157	        DEFM    'DRAW'
+ 344:     -	01E9' E1      	        DEFB    0E1H
+ 345:     -	01EA' 454E4450	        DEFM    'ENDPROC'
+	              524F43
+ 346:     -	01F1' 00      	        DEFB    0
+ 347:     -	01F2' E0      	        DEFB    0E0H
+ 348:     -	01F3' 454E44  	        DEFM    'END'
+ 349:     -	01F6' 00      	        DEFB    0
+ 350:     -	01F7' E2      	        DEFB    0E2H
+ 351:     -	01F8' 454E5645	        DEFM    'ENVELOPE'
+	              4C4F5045
+ 352:     -	0200' 8B      	        DEFB    8BH
+ 353:     -	0201' 454C5345	        DEFM    'ELSE'
+ 354:     -	0205' A0      	        DEFB    0A0H
+ 355:     -	0206' 4556414C	        DEFM    'EVAL'
+ 356:     -	020A' 9E      	        DEFB    9EH
+ 357:     -	020B' 45524C  	        DEFM    'ERL'
+ 358:     -	020E' 00      	        DEFB    0
+ 359:     -	020F' 85      	        DEFB    85H
+ 360:     -	0210' 4552524F	        DEFM    'ERROR'
+	              52
+ 361:     -	0215' C5      	        DEFB    0C5H
+ 362:     -	0216' 454F46  	        DEFM    'EOF'
+ 363:     -	0219' 00      	        DEFB    0
+ 364:     -	021A' 82      	        DEFB    82H
+ 365:     -	021B' 454F52  	        DEFM    'EOR'
+ 366:     -	021E' 9F      	        DEFB    9FH
+ 367:     -	021F' 455252  	        DEFM    'ERR'
+ 368:     -	0222' 00      	        DEFB    0
+ 369:     -	0223' A1      	        DEFB    0A1H
+ 370:     -	0224' 455850  	        DEFM    'EXP'
+ 371:     -	0227' A2      	        DEFB    0A2H
+ 372:     -	0228' 455854  	        DEFM    'EXT'
+ 373:     -	022B' 00      	        DEFB    0
+ 374:     -	022C' E3      	        DEFB    0E3H
+ 375:     -	022D' 464F52  	        DEFM    'FOR'
+ 376:     -	0230' A3      	        DEFB    0A3H
+ 377:     -	0231' 46414C53	        DEFM    'FALSE'
+	              45
+ 378:     -	0236' 00      	        DEFB    0
+ 379:     -	0237' A4      	        DEFB    0A4H
+ 380:     -	0238' 464E    	        DEFM    'FN'
+ 381:     -	023A' E5      	        DEFB    0E5H
+ 382:     -	023B' 474F544F	        DEFM    'GOTO'
+ 383:     -	023F' BE      	        DEFB    0BEH
+ 384:     -	0240' 47455424	        DEFM    'GET$'
+ 385:     -	0244' A5      	        DEFB    0A5H
+ 386:     -	0245' 474554  	        DEFM    'GET'
+ 387:     -	0248' E4      	        DEFB    0E4H
+ 388:     -	0249' 474F5355	        DEFM    'GOSUB'
+	              42
+ 389:     -	024E' E6      	        DEFB    0E6H
+ 390:     -	024F' 47434F4C	        DEFM    'GCOL'
+ 391:     -	0253' 93      	        DEFB    93H
+ 392:     -	0254' 48494D45	        DEFM    'HIMEM'
+	              4D
+ 393:     -	0259' 00      	        DEFB    0
+ 394:     -	025A' E8      	        DEFB    0E8H
+ 395:     -	025B' 494E5055	        DEFM    'INPUT'
+	              54
+ 396:     -	0260' E7      	        DEFB    0E7H
+ 397:     -	0261' 4946    	        DEFM    'IF'
+ 398:     -	0263' BF      	        DEFB    0BFH
+ 399:     -	0264' 494E4B45	        DEFM    'INKEY$'
+	              5924
+ 400:     -	026A' A6      	        DEFB    0A6H
+ 401:     -	026B' 494E4B45	        DEFM    'INKEY'
+	              59
+ 402:     -	0270' A8      	        DEFB    0A8H
+ 403:     -	0271' 494E54  	        DEFM    'INT'
+ 404:     -	0274' A7      	        DEFB    0A7H
+ 405:     -	0275' 494E5354	        DEFM    'INSTR('
+	              5228
+ 406:     -	027B' C9      	        DEFB    0C9H
+ 407:     -	027C' 4C495354	        DEFM    'LIST'
+ 408:     -	0280' 86      	        DEFB    86H
+ 409:     -	0281' 4C494E45	        DEFM    'LINE'
+ 410:     -	0285' C8      	        DEFB    0C8H
+ 411:     -	0286' 4C4F4144	        DEFM    'LOAD'
+ 412:     -	028A' 92      	        DEFB    92H
+ 413:     -	028B' 4C4F4D45	        DEFM    'LOMEM'
+	              4D
+ 414:     -	0290' 00      	        DEFB    0
+ 415:     -	0291' EA      	        DEFB    0EAH
+ 416:     -	0292' 4C4F4341	        DEFM    'LOCAL'
+	              4C
+ 417:     -	0297' C0      	        DEFB    0C0H
+ 418:     -	0298' 4C454654	        DEFM    'LEFT$('
+	              2428
+ 419:     -	029E' A9      	        DEFB    0A9H
+ 420:     -	029F' 4C454E  	        DEFM    'LEN'
+ 421:     -	02A2' E9      	        DEFB    0E9H
+ 422:     -	02A3' 4C4554  	        DEFM    'LET'
+ 423:     -	02A6' AB      	        DEFB    0ABH
+ 424:     -	02A7' 4C4F47  	        DEFM    'LOG'
+ 425:     -	02AA' AA      	        DEFB    0AAH
+ 426:     -	02AB' 4C4E    	        DEFM    'LN'
+ 427:     -	02AD' C1      	        DEFB    0C1H
+ 428:     -	02AE' 4D494424	        DEFM    'MID$('
+	              28
+ 429:     -	02B3' EB      	        DEFB    0EBH
+ 430:     -	02B4' 4D4F4445	        DEFM    'MODE'
+ 431:     -	02B8' 83      	        DEFB    83H
+ 432:     -	02B9' 4D4F44  	        DEFM    'MOD'
+ 433:     -	02BC' EC      	        DEFB    0ECH
+ 434:     -	02BD' 4D4F5645	        DEFM    'MOVE'
+ 435:     -	02C1' ED      	        DEFB    0EDH
+ 436:     -	02C2' 4E455854	        DEFM    'NEXT'
+ 437:     -	02C6' CA      	        DEFB    0CAH
+ 438:     -	02C7' 4E4557  	        DEFM    'NEW'
+ 439:     -	02CA' 00      	        DEFB    0
+ 440:     -	02CB' AC      	        DEFB    0ACH
+ 441:     -	02CC' 4E4F54  	        DEFM    'NOT'
+ 442:     -	02CF' CB      	        DEFB    0CBH
+ 443:     -	02D0' 4F4C44  	        DEFM    'OLD'
+ 444:     -	02D3' 00      	        DEFB    0
+ 445:     -	02D4' EE      	        DEFB    0EEH
+ 446:     -	02D5' 4F4E    	        DEFM    'ON'
+ 447:     -	02D7' 87      	        DEFB    87H
+ 448:     -	02D8' 4F4646  	        DEFM    'OFF'
+ 449:     -	02DB' 84      	        DEFB    84H
+ 450:     -	02DC' 4F52    	        DEFM    'OR'
+ 451:     -	02DE' 8E      	        DEFB    8EH
+ 452:     -	02DF' 4F50454E	        DEFM    'OPENIN'
+	              494E
+ 453:     -	02E5' AE      	        DEFB    0AEH
+ 454:     -	02E6' 4F50454E	        DEFM    'OPENOUT'
+	              4F5554
+ 455:     -	02ED' AD      	        DEFB    0ADH
+ 456:     -	02EE' 4F50454E	        DEFM    'OPENUP'
+	              5550
+ 457:     -	02F4' FF      	        DEFB    0FFH
+ 458:     -	02F5' 4F53434C	        DEFM    'OSCLI'
+	              49
+ 459:     -	02FA' F1      	        DEFB    0F1H
+ 460:     -	02FB' 5052494E	        DEFM    'PRINT'
+	              54
+ 461:     -	0300' 90      	        DEFB    90H
+ 462:     -	0301' 50414745	        DEFM    'PAGE'
+ 463:     -	0305' 00      	        DEFB    0
+ 464:     -	0306' 8F      	        DEFB    8FH
+ 465:     -	0307' 505452  	        DEFM    'PTR'
+ 466:     -	030A' 00      	        DEFB    0
+ 467:     -	030B' AF      	        DEFB    0AFH
+ 468:     -	030C' 5049    	        DEFM    'PI'
+ 469:     -	030E' 00      	        DEFB    0
+ 470:     -	030F' F0      	        DEFB    0F0H
+ 471:     -	0310' 504C4F54	        DEFM    'PLOT'
+ 472:     -	0314' B0      	        DEFB    0B0H
+ 473:     -	0315' 504F494E	        DEFM    'POINT('
+	              5428
+ 474:     -	031B' F2      	        DEFB    0F2H
+ 475:     -	031C' 50524F43	        DEFM    'PROC'
+ 476:     -	0320' B1      	        DEFB    0B1H
+ 477:     -	0321' 504F53  	        DEFM    'POS'
+ 478:     -	0324' 00      	        DEFB    0
+ 479:     -	0325' CE      	        DEFB    0CEH
+ 480:     -	0326' 505554  	        DEFM    'PUT'
+ 481:     -	0329' F8      	        DEFB    0F8H
+ 482:     -	032A' 52455455	        DEFM    'RETURN'
+	              524E
+ 483:     -	0330' 00      	        DEFB    0
+ 484:     -	0331' F5      	        DEFB    0F5H
+ 485:     -	0332' 52455045	        DEFM    'REPEAT'
+	              4154
+ 486:     -	0338' F6      	        DEFB    0F6H
+ 487:     -	0339' 5245504F	        DEFM    'REPORT'
+	              5254
+ 488:     -	033F' 00      	        DEFB    0
+ 489:     -	0340' F3      	        DEFB    0F3H
+ 490:     -	0341' 52454144	        DEFM    'READ'
+ 491:     -	0345' F4      	        DEFB    0F4H
+ 492:     -	0346' 52454D  	        DEFM    'REM'
+ 493:     -	0349' F9      	        DEFB    0F9H
+ 494:     -	034A' 52554E  	        DEFM    'RUN'
+ 495:     -	034D' 00      	        DEFB    0
+ 496:     -	034E' B2      	        DEFB    0B2H
+ 497:     -	034F' 524144  	        DEFM    'RAD'
+ 498:     -	0352' F7      	        DEFB    0F7H
+ 499:     -	0353' 52455354	        DEFM    'RESTORE'
+	              4F5245
+ 500:     -	035A' C2      	        DEFB    0C2H
+ 501:     -	035B' 52494748	        DEFM    'RIGHT$('
+	              542428
+ 502:     -	0362' B3      	        DEFB    0B3H
+ 503:     -	0363' 524E44  	        DEFM    'RND'
+ 504:     -	0366' 00      	        DEFB    0
+ 505:     -	0367' CC      	        DEFB    0CCH
+ 506:     -	0368' 52454E55	        DEFM    'RENUMBER'
+	              4D424552
+ 507:     -	0370' 88      	        DEFB    88H
+ 508:     -	0371' 53544550	        DEFM    'STEP'
+ 509:     -	0375' CD      	        DEFB    0CDH
+ 510:     -	0376' 53415645	        DEFM    'SAVE'
+ 511:     -	037A' B4      	        DEFB    0B4H
+ 512:     -	037B' 53474E  	        DEFM    'SGN'
+ 513:     -	037E' B5      	        DEFB    0B5H
+ 514:     -	037F' 53494E  	        DEFM    'SIN'
+ 515:     -	0382' B6      	        DEFB    0B6H
+ 516:     -	0383' 535152  	        DEFM    'SQR'
+ 517:     -	0386' 89      	        DEFB    89H
+ 518:     -	0387' 535043  	        DEFM    'SPC'
+ 519:     -	038A' C3      	        DEFB    0C3H
+ 520:     -	038B' 53545224	        DEFM    'STR$'
+ 521:     -	038F' C4      	        DEFB    0C4H
+ 522:     -	0390' 53545249	        DEFM    'STRING$('
+	              4E472428
+ 523:     -	0398' D4      	        DEFB    0D4H
+ 524:     -	0399' 534F554E	        DEFM    'SOUND'
+	              44
+ 525:     -	039E' FA      	        DEFB    0FAH
+ 526:     -	039F' 53544F50	        DEFM    'STOP'
+ 527:     -	03A3' 00      	        DEFB    0
+ 528:     -	03A4' B7      	        DEFB    0B7H
+ 529:     -	03A5' 54414E  	        DEFM    'TAN'
+ 530:     -	03A8' 8C      	        DEFB    8CH
+ 531:     -	03A9' 5448454E	        DEFM    'THEN'
+ 532:     -	03AD' B8      	        DEFB    0B8H
+ 533:     -	03AE' 544F    	        DEFM    'TO'
+ 534:     -	03B0' 8A      	        DEFB    8AH
+ 535:     -	03B1' 54414228	        DEFM    'TAB('
+ 536:     -	03B5' FC      	        DEFB    0FCH
+ 537:     -	03B6' 54524143	        DEFM    'TRACE'
+	              45
+ 538:     -	03BB' 91      	        DEFB    91H
+ 539:     -	03BC' 54494D45	        DEFM    'TIME'
+ 540:     -	03C0' 00      	        DEFB    0
+ 541:     -	03C1' B9      	        DEFB    0B9H
+ 542:     -	03C2' 54525545	        DEFM    'TRUE'
+ 543:     -	03C6' 00      	        DEFB    0
+ 544:     -	03C7' FD      	        DEFB    0FDH
+ 545:     -	03C8' 554E5449	        DEFM    'UNTIL'
+	              4C
+ 546:     -	03CD' BA      	        DEFB    0BAH
+ 547:     -	03CE' 555352  	        DEFM    'USR'
+ 548:     -	03D1' EF      	        DEFB    0EFH
+ 549:     -	03D2' 564455  	        DEFM    'VDU'
+ 550:     -	03D5' BB      	        DEFB    0BBH
+ 551:     -	03D6' 56414C  	        DEFM    'VAL'
+ 552:     -	03D9' BC      	        DEFB    0BCH
+ 553:     -	03DA' 56504F53	        DEFM    'VPOS'
+ 554:     -	03DE' 00      	        DEFB    0
+ 555:     -	03DF' FE      	        DEFB    0FEH
+ 556:     -	03E0' 57494454	        DEFM    'WIDTH'
+	              48
+ 557:     -	03E5' D3      	        DEFB    0D3H
+ 558:     -	03E6' 48494D45	        DEFM    'HIMEM'
+	              4D
+ 559:     -	03EB' D2      	        DEFB    0D2H
+ 560:     -	03EC' 4C4F4D45	        DEFM    'LOMEM'
+	              4D
+ 561:     -	03F1' D0      	        DEFB    0D0H
+ 562:     -	03F2' 50414745	        DEFM    'PAGE'
+ 563:     -	03F6' CF      	        DEFB    0CFH
+ 564:     -	03F7' 505452  	        DEFM    'PTR'
+ 565:     -	03FA' D1      	        DEFB    0D1H
+ 566:     -	03FB' 54494D45	        DEFM    'TIME'
+ 567:     -	03FF' 01      	        DEFB    1
+ 568:     -	0400' 4D697373	        DEFM    'Missing '
+	              696E6720
+ 569:     -	0408' 02      	        DEFB    2
+ 570:     -	0409' 4E6F2073	        DEFM    'No such '
+	              75636820
+ 571:     -	0411' 03      	        DEFB    3
+ 572:     -	0412' 42616420	        DEFM    'Bad '
+ 573:     -	0416' 04      	        DEFB    4
+ 574:     -	0417' 2072616E	        DEFM    ' range'
+	              6765
+ 575:     -	041D' 05      	        DEFB    5
+ 576:     -	041E' 76617269	        DEFM    'variable'
+	              61626C65
+ 577:     -	0426' 06      	        DEFB    6
+ 578:     -	0427' 4F757420	        DEFM    'Out of'
+	              6F66
+ 579:     -	042D' 07      	        DEFB    7
+ 580:     -	042E' 4E6F20  	        DEFM    'No '
+ 581:     -	0431' 08      	        DEFB    8
+ 582:     -	0432' 20737061	        DEFM    ' space'
+	              6365
+ 583:     -	02DF'         	KEYWDL  EQU     $-KEYWDS
+ 584:     -	0438' FFFF    	        DEFW    -1
+ 585:				;
+ 586:				;ERROR MESSAGES:
+ 587:				;
+ 588:     -	043A' 07      	ERRWDS: DEFB    7
+ 589:     -	043B' 726F6F6D	        DEFM    'room'
+ 590:     -	043F' 00      	        DEFB    0
+ 591:     -	0440' 06      	        DEFB    6
+ 592:     -	0441' 04      	        DEFB    4
+ 593:     -	0442' 00      	        DEFB    0
+ 594:     -	0443' 0000    	        DEFW    0
+ 595:     -	0445' 4D697374	        DEFM    'Mistake'
+	              616B65
+ 596:     -	044C' 00      	        DEFB    0
+ 597:     -	044D' 01      	        DEFB    1
+ 598:     -	044E' 2C      	        DEFM    ','
+ 599:     -	044F' 00      	        DEFB    0
+ 600:     -	0450' 54797065	        DEFM    'Type mismatch'
+	              206D6973
+	              6D617463
+	              68
+ 601:     -	045D' 00      	        DEFB    0
+ 602:     -	045E' 07      	        DEFB    7
+ 603:     -	045F' A4      	        DEFB    FN
+ 604:     -	0460' 0000    	        DEFW    0
+ 605:     -	0462' 01      	        DEFB    1
+ 606:     -	0463' 22      	        DEFM    '"'
+ 607:     -	0464' 00      	        DEFB    0
+ 608:     -	0465' 03      	        DEFB    3
+ 609:     -	0466' DE      	        DEFB    DIM
+ 610:     -	0467' 00      	        DEFB    0
+ 611:     -	0468' DE      	        DEFB    DIM
+ 612:     -	0469' 08      	        DEFB    8
+ 613:     -	046A' 00      	        DEFB    0
+ 614:     -	046B' 4E6F7420	        DEFM    'Not '
+ 615:     -	046F' EA      	        DEFB    LOCAL
+ 616:     -	0470' 00      	        DEFB    0
+ 617:     -	0471' 07      	        DEFB    7
+ 618:     -	0472' F2      	        DEFB    PROC
+ 619:     -	0473' 00      	        DEFB    0
+ 620:     -	0474' 41727261	        DEFM    'Array'
+	              79
+ 621:     -	0479' 00      	        DEFB    0
+ 622:     -	047A' 53756273	        DEFM    'Subscript'
+	              63726970
+	              74
+ 623:     -	0483' 00      	        DEFB    0
+ 624:     -	0484' 53796E74	        DEFM    'Syntax error'
+	              61782065
+	              72726F72
+ 625:     -	0490' 00      	        DEFB    0
+ 626:     -	0491' 45736361	        DEFM    'Escape'
+	              7065
+ 627:     -	0497' 00      	        DEFB    0
+ 628:     -	0498' 44697669	        DEFM    'Division by zero'
+	              73696F6E
+	              20627920
+	              7A65726F
+ 629:     -	04A8' 00      	        DEFB    0
+ 630:     -	04A9' 53747269	        DEFM    'String too long'
+	              6E672074
+	              6F6F206C
+	              6F6E67
+ 631:     -	04B8' 00      	        DEFB    0
+ 632:     -	04B9' 546F6F20	        DEFM    'Too big'
+	              626967
+ 633:     -	04C0' 00      	        DEFB    0
+ 634:     -	04C1' 2D766520	        DEFM    '-ve root'
+	              726F6F74
+ 635:     -	04C9' 00      	        DEFB    0
+ 636:     -	04CA' 4C6F67  	        DEFM    'Log'
+ 637:     -	04CD' 04      	        DEFB    4
+ 638:     -	04CE' 00      	        DEFB    0
+ 639:     -	04CF' 41636375	        DEFM    'Accuracy lost'
+	              72616379
+	              206C6F73
+	              74
+ 640:     -	04DC' 00      	        DEFB    0
+ 641:     -	04DD' 457870  	        DEFM    'Exp'
+ 642:     -	04E0' 04      	        DEFB    4
+ 643:     -	04E1' 0000    	        DEFW    0
+ 644:     -	04E3' 02      	        DEFB    2
+ 645:     -	04E4' 05      	        DEFB    5
+ 646:     -	04E5' 00      	        DEFB    0
+ 647:     -	04E6' 01      	        DEFB    1
+ 648:     -	04E7' 29      	        DEFM    ')'
+ 649:     -	04E8' 00      	        DEFB    0
+ 650:     -	04E9' 03      	        DEFB    3
+ 651:     -	04EA' 484558  	        DEFM    'HEX'
+ 652:     -	04ED' 00      	        DEFB    0
+ 653:     -	04EE' 02      	        DEFB    2
+ 654:     -	04EF' A4      	        DEFB    FN
+ 655:     -	04F0' 2F      	        DEFM    '/'
+ 656:     -	04F1' F2      	        DEFB    PROC
+ 657:     -	04F2' 00      	        DEFB    0
+ 658:     -	04F3' 03      	        DEFB    3
+ 659:     -	04F4' 63616C6C	        DEFM    'call'
+ 660:     -	04F8' 00      	        DEFB    0
+ 661:     -	04F9' 41726775	        DEFM    'Arguments'
+	              6D656E74
+	              73
+ 662:     -	0502' 00      	        DEFB    0
+ 663:     -	0503' 07      	        DEFB    7
+ 664:     -	0504' E3      	        DEFB    FOR
+ 665:     -	0505' 00      	        DEFB    0
+ 666:     -	0506' 43616E27	        DEFM    'Can''t match '
+	              74206D61
+	              74636820
+ 667:     -	0512' E3      	        DEFB    FOR
+ 668:     -	0513' 00      	        DEFB    0
+ 669:     -	0514' E3      	        DEFB    FOR
+ 670:     -	0515' 20      	        DEFM    ' '
+ 671:     -	0516' 05      	        DEFB    5
+ 672:     -	0517' 0000    	        DEFW    0
+ 673:     -	0519' 07      	        DEFB    7
+ 674:     -	051A' B8      	        DEFB    TO
+ 675:     -	051B' 0000    	        DEFW    0
+ 676:     -	051D' 07      	        DEFB    7
+ 677:     -	051E' E4      	        DEFB    GOSUB
+ 678:     -	051F' 00      	        DEFB    0
+ 679:     -	0520' EE      	        DEFB    ON
+ 680:     -	0521' 2073796E	        DEFM    ' syntax'
+	              746178
+ 681:     -	0528' 00      	        DEFB    0
+ 682:     -	0529' EE      	        DEFB    ON
+ 683:     -	052A' 04      	        DEFB    4
+ 684:     -	052B' 00      	        DEFB    0
+ 685:     -	052C' 02      	        DEFB    2
+ 686:     -	052D' 6C696E65	        DEFM    'line'
+ 687:     -	0531' 00      	        DEFB    0
+ 688:     -	0532' 06      	        DEFB    6
+ 689:     -	0533' 20      	        DEFM    ' '
+ 690:     -	0534' DC      	        DEFB    DATA
+ 691:     -	0535' 00      	        DEFB    0
+ 692:     -	0536' 07      	        DEFB    7
+ 693:     -	0537' F5      	        DEFB    REPEAT
+ 694:     -	0538' 0000    	        DEFW    0
+ 695:     -	053A' 01      	        DEFB    1
+ 696:     -	053B' 23      	        DEFM    '#'
+ 697:     -	053C' 00      	        DEFB    0
+ 699:				;
+ 700:				;COMMANDS:
+ 701:				;
+ 702:				;DELETE line,line
+ 703:				;
+ 704: 1374+17	053D' CDD407  	DELETE: CALL    SETTOP          ;SET TOP
+ 705: 1391+17	0540' CD3A0B  	        CALL    DLPAIR
+ 706: 1408+7	0543' 7E      	DELET1: LD      A,(HL)
+ 707: 1415+4	0544' B7      	        OR      A
+ 708: 1419+7+5	0545' 2871    	        JR      Z,WARMNC
+ 709: 1426+6	0547' 23      	        INC     HL
+ 710: 1432+7	0548' 5E      	        LD      E,(HL)
+ 711: 1439+6	0549' 23      	        INC     HL
+ 712: 1445+7	054A' 56      	        LD      D,(HL)
+ 713: 1452+4	054B' 7A      	        LD      A,D
+ 714: 1456+4	054C' B3      	        OR      E
+ 715: 1460+7+5	054D' 281A    	        JR      Z,CLOOP1        ;LINE NUMBER ZERO
+ 716: 1467+6	054F' 2B      	        DEC     HL
+ 717: 1473+6	0550' 2B      	        DEC     HL
+ 718: 1479+4	0551' EB      	        EX      DE,HL
+ 719: 1483+4	0552' 37      	        SCF
+ 720: 1487+15	0553' ED42    	        SBC     HL,BC
+ 721: 1502+4	0555' EB      	        EX      DE,HL
+ 722: 1506+7+5	0556' 3060    	        JR      NC,WARMNC
+ 723: 1513+11	0558' C5      	        PUSH    BC
+ 724: 1524+17	0559' CD9407  	        CALL    DEL
+ 725: 1541+10	055C' C1      	        POP     BC
+ 726: 1551+12	055D' 18E4    	        JR      DELET1
+ 727:				;
+ 728:				;LISTO expr
+ 729:				;
+ 730: 1563+10	055F' FD23    	LISTO:  INC     IY              ;SKIP "O"
+ 731: 1573+17	0561' CD0000  	        CALL    EXPRI
+ 732: 1590+4	0564' D9      	        EXX
+ 733: 1594+4	0565' 7D      	        LD      A,L
+ 734: 1598+13	0566' 320000  	        LD      (LISTON),A
+ 735: 1611+10	0569' C39B00  	CLOOP1: JP      CLOOP
+ 736:				;
+ 737:				;LIST
+ 738:				;LIST line
+ 739:				;LIST line,line [IF string]
+ 740:				;LIST ,line
+ 741:				;LIST line,
+ 742:				;
+ 743: 1621+7	056C' FE4F    	LIST:   CP      'O'
+ 744: 1628+7+5	056E' 28EF    	        JR      Z,LISTO
+ 745: 1635+17	0570' CD3A0B  	        CALL    DLPAIR
+ 746: 1652+17	0573' CD0000  	        CALL    NXT
+ 747: 1669+7	0576' FEE7    	        CP      TIF             ;IF CLAUSE ?
+ 748: 1676+7	0578' 3E00    	        LD      A,0             ;INIT IF-CLAUSE LENGTH
+ 749: 1683+7+5	057A' 2015    	        JR      NZ,LISTB
+ 750: 1690+10	057C' FD23    	        INC     IY              ;SKIP IF
+ 751: 1700+17	057E' CD0000  	        CALL    NXT             ;SKIP SPACES (IF ANY)
+ 752: 1717+4	0581' EB      	        EX      DE,HL
+ 753: 1721+15	0582' FDE5    	        PUSH    IY
+ 754: 1736+10	0584' E1      	        POP     HL              ;HL ADDRESSES IF CLAUSE
+ 755: 1746+7	0585' 3E0D    	        LD      A,CR
+ 756: 1753+11	0587' C5      	        PUSH    BC
+ 757: 1764+10	0588' 010001  	        LD      BC,256
+ 758: 1774+16+5	058B' EDB1    	        CPIR                    ;LOCATE CR
+ 759: 1790+4	058D' 79      	        LD      A,C
+ 760: 1794+4	058E' 2F      	        CPL                     ;A = SUBSTRING LENGTH
+ 761: 1798+10	058F' C1      	        POP     BC
+ 762: 1808+4	0590' EB      	        EX      DE,HL
+ 763: 1812+4	0591' 5F      	LISTB:  LD      E,A             ;IF-CLAUSE LENGTH
+ 764: 1816+4	0592' 78      	        LD      A,B
+ 765: 1820+4	0593' B1      	        OR      C
+ 766: 1824+7+5	0594' 2001    	        JR      NZ,LISTA
+ 767: 1831+6	0596' 0B      	        DEC     BC
+ 768: 1837+4	0597' D9      	LISTA:  EXX
+ 769: 1841+14	0598' DD210000	        LD      IX,LISTON
+ 770: 1855+10	059C' 010000  	        LD      BC,0            ;INDENTATION COUNT
+ 771: 1865+4	059F' D9      	        EXX
+ 772: 1869+7	05A0' 3E14    	        LD      A,20
+ 773:				;
+ 774: 1876+11	05A2' C5      	LISTC:  PUSH    BC              ;SAVE HIGH LINE NUMBER
+ 775: 1887+11	05A3' D5      	        PUSH    DE              ;SAVE IF-CLAUSE LENGTH
+ 776: 1898+11	05A4' E5      	        PUSH    HL              ;SAVE PROGRAM POINTER
+ 777: 1909+4	05A5' 08      	        EX      AF,AF'
+ 778: 1913+7	05A6' 7E      	        LD      A,(HL)
+ 779: 1920+4	05A7' B7      	        OR      A
+ 780: 1924+7+5	05A8' 280E    	        JR      Z,WARMNC
+ 781:				;
+ 782:				;CHECK IF PAST TERMINATING LINE NUMBER:
+ 783:				;
+ 784: 1931+4	05AA' 7B      	        LD      A,E             ;A = IF-CLAUSE LENGTH
+ 785: 1935+6	05AB' 23      	        INC     HL
+ 786: 1941+7	05AC' 5E      	        LD      E,(HL)
+ 787: 1948+6	05AD' 23      	        INC     HL
+ 788: 1954+7	05AE' 56      	        LD      D,(HL)          ;DE = LINE NUMBER
+ 789: 1961+6	05AF' 2B      	        DEC     HL
+ 790: 1967+6	05B0' 2B      	        DEC     HL
+ 791: 1973+11	05B1' D5      	        PUSH    DE              ;SAVE LINE NUMBER
+ 792: 1984+4	05B2' EB      	        EX      DE,HL
+ 793: 1988+4	05B3' 37      	        SCF
+ 794: 1992+15	05B4' ED42    	        SBC     HL,BC
+ 795: 2007+4	05B6' EB      	        EX      DE,HL
+ 796: 2011+10	05B7' D1      	        POP     DE              ;RESTORE LINE NUMBER
+ 797: 2021+10	05B8' D29A00  	WARMNC: JP      NC,WARM
+ 798: 2031+7	05BB' 4E      	        LD      C,(HL)          ;C = LINE LENGTH + 4
+ 799: 2038+4	05BC' 47      	        LD      B,A             ;B = IF-CLAUSE LENGTH
+ 800:				;
+ 801:				;CHECK IF "UNLISTABLE":
+ 802:				;
+ 803: 2042+4	05BD' 7A      	        LD      A,D
+ 804: 2046+4	05BE' B3      	        OR      E
+ 805: 2050+10	05BF' CA9B00  	        JP      Z,CLOOP
+ 806:				;
+ 807:				;CHECK FOR IF CLAUSE:
+ 808:				;
+ 809: 2060+6	05C2' 23      	        INC     HL
+ 810: 2066+6	05C3' 23      	        INC     HL
+ 811: 2072+6	05C4' 23      	        INC     HL              ;HL ADDRESSES LINE TEXT
+ 812: 2078+4	05C5' 0D      	        DEC     C
+ 813: 2082+4	05C6' 0D      	        DEC     C
+ 814: 2086+4	05C7' 0D      	        DEC     C
+ 815: 2090+4	05C8' 0D      	        DEC     C               ;C = LINE LENGTH
+ 816: 2094+11	05C9' D5      	        PUSH    DE              ;SAVE LINE NUMBER
+ 817: 2105+11	05CA' E5      	        PUSH    HL              ;SAVE LINE ADDRESS
+ 818: 2116+4	05CB' AF      	        XOR     A               ;A <- 0
+ 819: 2120+4	05CC' B8      	        CP      B               ;WAS THERE AN IF-CLAUSE
+ 820: 2124+15	05CD' FDE5    	        PUSH    IY
+ 821: 2139+10	05CF' D1      	        POP     DE              ;DE ADDRESSES IF-CLAUSE
+ 822: 2149+10+7	05D0' C40000  	        CALL    NZ,SEARCH       ;SEARCH FOR IF CLAUSE
+ 823: 2159+10	05D3' E1      	        POP     HL              ;RESTORE LINE ADDRESS
+ 824: 2169+10	05D4' D1      	        POP     DE              ;RESTORE LINE NUMBER
+ 825: 2179+15	05D5' FDE5    	        PUSH    IY
+ 826: 2194+10+7	05D7' CC1008  	        CALL    Z,LISTIT        ;LIST IF MATCH
+ 827: 2204+14	05DA' FDE1    	        POP     IY
+ 828:				;
+ 829: 2218+4	05DC' 08      	        EX      AF,AF'
+ 830: 2222+4	05DD' 3D      	        DEC     A
+ 831: 2226+17	05DE' CD0000  	        CALL    LTRAP
+ 832: 2243+10	05E1' E1      	        POP     HL              ;RESTORE POINTER
+ 833: 2253+7	05E2' 5E      	        LD      E,(HL)
+ 834: 2260+7	05E3' 1600    	        LD      D,0
+ 835: 2267+11	05E5' 19      	        ADD     HL,DE           ;ADDRESS NEXT LINE
+ 836: 2278+10	05E6' D1      	        POP     DE              ;RESTORE IF-CLAUSE LEN
+ 837: 2288+10	05E7' C1      	        POP     BC              ;RESTORE HI LINE NUMBER
+ 838: 2298+12	05E8' 18B8    	        JR      LISTC
+ 839:				;
+ 840:				;RENUMBER
+ 841:				;RENUMBER start
+ 842:				;RENUMBER start,increment
+ 843:				;RENUMBER ,increment
+ 844:				;
+ 845: 2310+17	05EA' CDF807  	RENUM:  CALL    CLEAR           ;USES DYNAMIC AREA
+ 846: 2327+17	05ED' CD170B  	        CALL    PAIR            ;LOAD HL,BC
+ 847: 2344+4	05F0' D9      	        EXX
+ 848: 2348+16	05F1' 2A0000  	        LD      HL,(PAGE)
+ 849: 2364+20	05F4' ED5B0000	        LD      DE,(LOMEM)
+ 850: 2384+7	05F8' 7E      	RENUM1: LD      A,(HL)          ;BUILD TABLE
+ 851: 2391+4	05F9' B7      	        OR      A
+ 852: 2395+7+5	05FA' 2830    	        JR      Z,RENUM2
+ 853: 2402+6	05FC' 23      	        INC     HL
+ 854: 2408+7	05FD' 4E      	        LD      C,(HL)          ;OLD LINE NUMBER
+ 855: 2415+6	05FE' 23      	        INC     HL
+ 856: 2421+7	05FF' 46      	        LD      B,(HL)
+ 857: 2428+4	0600' 78      	        LD      A,B
+ 858: 2432+4	0601' B1      	        OR      C
+ 859: 2436+10	0602' CA9B00  	        JP      Z,CLOOP         ;LINE NUMBER ZERO
+ 860: 2446+4	0605' EB      	        EX      DE,HL
+ 861: 2450+7	0606' 71      	        LD      (HL),C
+ 862: 2457+6	0607' 23      	        INC     HL
+ 863: 2463+7	0608' 70      	        LD      (HL),B
+ 864: 2470+6	0609' 23      	        INC     HL
+ 865: 2476+4	060A' D9      	        EXX
+ 866: 2480+11	060B' E5      	        PUSH    HL
+ 867: 2491+11	060C' 09      	        ADD     HL,BC           ;ADD INCREMENT
+ 868: 2502+10	060D' DA120B  	        JP      C,TOOBIG        ;"Too big"
+ 869: 2512+4	0610' D9      	        EXX
+ 870: 2516+10	0611' C1      	        POP     BC
+ 871: 2526+7	0612' 71      	        LD      (HL),C
+ 872: 2533+6	0613' 23      	        INC     HL
+ 873: 2539+7	0614' 70      	        LD      (HL),B
+ 874: 2546+6	0615' 23      	        INC     HL
+ 875: 2552+4	0616' EB      	        EX      DE,HL
+ 876: 2556+6	0617' 2B      	        DEC     HL
+ 877: 2562+6	0618' 2B      	        DEC     HL
+ 878: 2568+4	0619' AF      	        XOR     A
+ 879: 2572+4	061A' 47      	        LD      B,A
+ 880: 2576+7	061B' 4E      	        LD      C,(HL)
+ 881: 2583+11	061C' 09      	        ADD     HL,BC           ;NEXT LINE
+ 882: 2594+4	061D' EB      	        EX      DE,HL
+ 883: 2598+11	061E' E5      	        PUSH    HL
+ 884: 2609+4	061F' 24      	        INC     H
+ 885: 2613+15	0620' ED72    	        SBC     HL,SP
+ 886: 2628+10	0622' E1      	        POP     HL
+ 887: 2638+4	0623' EB      	        EX      DE,HL
+ 888: 2642+7+5	0624' 38D2    	        JR      C,RENUM1        ;CONTINUE
+ 889: 2649+17	0626' CD1C07  	        CALL    EXTERR          ;"RENUMBER space'
+ 890:     -	0629' CC      	        DEFB    REN
+ 891:     -	062A' 08      	        DEFB    8
+ 892:     -	062B' 00      	        DEFB    0
+ 893:				;
+ 894: 2666+4	062C' EB      	RENUM2: EX      DE,HL
+ 895: 2670+10	062D' 36FF    	        LD      (HL),-1
+ 896: 2680+6	062F' 23      	        INC     HL
+ 897: 2686+10	0630' 36FF    	        LD      (HL),-1
+ 898: 2696+20	0632' ED5B0000	        LD      DE,(LOMEM)
+ 899: 2716+4	0636' D9      	        EXX
+ 900: 2720+16	0637' 2A0000  	        LD      HL,(PAGE)
+ 901: 2736+7	063A' 4E      	RENUM3: LD      C,(HL)
+ 902: 2743+4	063B' 79      	        LD      A,C
+ 903: 2747+4	063C' B7      	        OR      A
+ 904: 2751+10	063D' CA9A00  	        JP      Z,WARM
+ 905: 2761+4	0640' D9      	        EXX
+ 906: 2765+4	0641' EB      	        EX      DE,HL
+ 907: 2769+6	0642' 23      	        INC     HL
+ 908: 2775+6	0643' 23      	        INC     HL
+ 909: 2781+7	0644' 5E      	        LD      E,(HL)
+ 910: 2788+6	0645' 23      	        INC     HL
+ 911: 2794+7	0646' 56      	        LD      D,(HL)
+ 912: 2801+6	0647' 23      	        INC     HL
+ 913: 2807+11	0648' D5      	        PUSH    DE
+ 914: 2818+4	0649' EB      	        EX      DE,HL
+ 915: 2822+16	064A' 220000  	        LD      (LINENO),HL
+ 916: 2838+4	064D' D9      	        EXX
+ 917: 2842+10	064E' D1      	        POP     DE
+ 918: 2852+6	064F' 23      	        INC     HL
+ 919: 2858+7	0650' 73      	        LD      (HL),E          ;NEW LINE NUMBER
+ 920: 2865+6	0651' 23      	        INC     HL
+ 921: 2871+7	0652' 72      	        LD      (HL),D
+ 922: 2878+6	0653' 23      	        INC     HL
+ 923: 2884+4	0654' 0D      	        DEC     C
+ 924: 2888+4	0655' 0D      	        DEC     C
+ 925: 2892+4	0656' 0D      	        DEC     C
+ 926: 2896+7	0657' 0600    	        LD      B,0
+ 927: 2903+7	0659' 3E8D    	RENUM7: LD      A,LINO
+ 928: 2910+16+5	065B' EDB1    	        CPIR                    ;SEARCH FOR LINE NUMBER
+ 929: 2926+7+5	065D' 20DB    	        JR      NZ,RENUM3
+ 930: 2933+11	065F' C5      	        PUSH    BC
+ 931: 2944+11	0660' E5      	        PUSH    HL
+ 932: 2955+11	0661' E5      	        PUSH    HL
+ 933: 2966+14	0662' FDE1    	        POP     IY
+ 934: 2980+4	0664' D9      	        EXX
+ 935: 2984+17	0665' CD0000  	        CALL    DECODE          ;DECODE LINE NUMBER
+ 936: 3001+4	0668' D9      	        EXX
+ 937: 3005+4	0669' 44      	        LD      B,H
+ 938: 3009+4	066A' 4D      	        LD      C,L
+ 939: 3013+16	066B' 2A0000  	        LD      HL,(LOMEM)
+ 940: 3029+7	066E' 5E      	RENUM4: LD      E,(HL)          ;CROSS-REFERENCE TABLE
+ 941: 3036+6	066F' 23      	        INC     HL
+ 942: 3042+7	0670' 56      	        LD      D,(HL)
+ 943: 3049+6	0671' 23      	        INC     HL
+ 944: 3055+4	0672' EB      	        EX      DE,HL
+ 945: 3059+4	0673' B7      	        OR      A               ;CLEAR CARRY
+ 946: 3063+15	0674' ED42    	        SBC     HL,BC
+ 947: 3078+4	0676' EB      	        EX      DE,HL
+ 948: 3082+7	0677' 5E      	        LD      E,(HL)          ;NEW NUMBER
+ 949: 3089+6	0678' 23      	        INC     HL
+ 950: 3095+7	0679' 56      	        LD      D,(HL)
+ 951: 3102+6	067A' 23      	        INC     HL
+ 952: 3108+7+5	067B' 38F1    	        JR      C,RENUM4
+ 953: 3115+4	067D' EB      	        EX      DE,HL
+ 954: 3119+7+5	067E' 2819    	        JR      Z,RENUM5        ;FOUND
+ 955: 3126+17	0680' CD570C  	        CALL    TELL
+ 956:     -	0683' 4661696C	        DEFM    'Failed at '
+	              65642061
+	              7420
+ 957:     -	068D' 00      	        DEFB    0
+ 958: 3143+16	068E' 2A0000  	        LD      HL,(LINENO)
+ 959: 3159+17	0691' CD2D09  	        CALL    PBCDL
+ 960: 3176+17	0694' CD9908  	        CALL    CRLF
+ 961: 3193+12	0697' 1806    	        JR      RENUM6
+ 962: 3205+10	0699' D1      	RENUM5: POP     DE
+ 963: 3215+11	069A' D5      	        PUSH    DE
+ 964: 3226+6	069B' 1B      	        DEC     DE
+ 965: 3232+17	069C' CD250C  	        CALL    ENCODE          ;RE-WRITE NUMBER
+ 966: 3249+10	069F' E1      	RENUM6: POP     HL
+ 967: 3259+10	06A0' C1      	        POP     BC
+ 968: 3269+12	06A1' 18B6    	        JR      RENUM7
+ 969:				;
+ 970:				;AUTO
+ 971:				;AUTO start,increment
+ 972:				;AUTO start
+ 973:				;AUTO ,increment
+ 974:				;
+ 975: 3281+17	06A3' CD170B  	AUTO:   CALL    PAIR
+ 976: 3298+16	06A6' 220000  	        LD      (AUTONO),HL
+ 977: 3314+4	06A9' 79      	        LD      A,C
+ 978: 3318+13	06AA' 320000  	        LD      (INCREM),A
+ 979: 3331+12	06AD' 1829    	        JR      CLOOP0
+ 980:				;
+ 981:				;BAD
+ 982:				;NEW
+ 983:				;
+ 984: 3343+17	06AF' CD570C  	BAD:    CALL    TELL            ;"Bad program'
+ 985:     -	06B2' 03      	        DEFB    3
+ 986:     -	06B3' 70726F67	        DEFM    'program'
+	              72616D
+ 987:     -	06BA' 0D      	        DEFB    CR
+ 988:     -	06BB' 0A      	        DEFB    LF
+ 989:     -	06BC' 00      	        DEFB    0
+ 990: 3360+17	06BD' CDF007  	NEW:    CALL    NEWIT
+ 991: 3377+12	06C0' 1816    	        JR      CLOOP0
+ 992:				;
+ 993:				;OLD
+ 994:				;
+ 995: 3389+16	06C2' 2A0000  	OLD:    LD      HL,(PAGE)
+ 996: 3405+11	06C5' E5      	        PUSH    HL
+ 997: 3416+6	06C6' 23      	        INC     HL
+ 998: 3422+6	06C7' 23      	        INC     HL
+ 999: 3428+6	06C8' 23      	        INC     HL
+1000: 3434+10	06C9' 01FC00  	        LD      BC,252
+1001: 3444+7	06CC' 3E0D    	        LD      A,CR
+1002: 3451+16+5	06CE' EDB1    	        CPIR
+1003: 3467+7+5	06D0' 20DD    	        JR      NZ,BAD
+1004: 3474+4	06D2' 7D      	        LD      A,L
+1005: 3478+10	06D3' E1      	        POP     HL
+1006: 3488+7	06D4' 77      	        LD      (HL),A
+1007: 3495+17	06D5' CDC907  	        CALL    CLEAN
+1008: 3512+10	06D8' C39B00  	CLOOP0: JP      CLOOP
+1009:				;
+1010:				;LOAD filename
+1011:				;
+1012: 3522+17	06DB' CD0000  	LOAD:   CALL    EXPRS           ;GET FILENAME
+1013: 3539+7	06DE' 3E0D    	        LD      A,CR
+1014: 3546+7	06E0' 12      	        LD      (DE),A
+1015: 3553+17	06E1' CDAF07  	        CALL    LOAD0
+1016: 3570+17	06E4' CDF807  	        CALL    CLEAR
+1017: 3587+12	06E7' 181B    	        JR      WARM0
+1018:				;
+1019:				;SAVE filename
+1020:				;
+1021: 3599+17	06E9' CDD407  	SAVE:   CALL    SETTOP          ;SET TOP
+1022: 3616+17	06EC' CD0000  	        CALL    EXPRS           ;FILENAME
+1023: 3633+7	06EF' 3E0D    	        LD      A,CR
+1024: 3640+7	06F1' 12      	        LD      (DE),A
+1025: 3647+20	06F2' ED5B0000	        LD      DE,(PAGE)
+1026: 3667+16	06F6' 2A0000  	        LD      HL,(TOP)
+1027: 3683+4	06F9' B7      	        OR      A
+1028: 3687+15	06FA' ED52    	        SBC     HL,DE
+1029: 3702+4	06FC' 44      	        LD      B,H             ;LENGTH OF PROGRAM
+1030: 3706+4	06FD' 4D      	        LD      C,L
+1031: 3710+10	06FE' 210000  	        LD      HL,ACCS
+1032: 3720+17	0701' CD0000  	        CALL    OSSAVE
+1033: 3737+10	0704' C39A00  	WARM0:  JP      WARM
+1034:				;
+1035:				;ERROR
+1036:				;
+1037: 3747+20	0707' ED7B0000	ERROR:  LD      SP,(HIMEM)
+1038: 3767+10	070B' 213A04  	        LD      HL,ERRWDS
+1039: 3777+4	070E' B7      	        OR      A
+1040: 3781+7+5	070F' 280A    	        JR      Z,ERROR1
+1041: 3788+4	0711' 47      	        LD      B,A             ;ERROR NUMBER
+1042: 3792+4	0712' 08      	        EX      AF,AF'
+1043: 3796+4	0713' AF      	        XOR     A
+1044: 3800+7	0714' BE      	ERROR0: CP      (HL)
+1045: 3807+6	0715' 23      	        INC     HL
+1046: 3813+7+5	0716' 20FC    	        JR      NZ,ERROR0
+1047: 3820+8+5	0718' 10FA    	        DJNZ    ERROR0
+1048: 3828+4	071A' 08      	        EX      AF,AF'
+1049: 3832+11	071B' E5      	ERROR1: PUSH    HL
+1050: 3843+10	071C' E1      	EXTERR: POP     HL
+1051: 3853+16	071D' 220000  	        LD      (ERRTXT),HL
+1052: 3869+20	0720' ED7B0000	        LD      SP,(HIMEM)
+1053: 3889+13	0724' 320000  	        LD      (ERR),A
+1054: 3902+17	0727' CDF008  	        CALL    SETLIN
+1055: 3919+16	072A' 220000  	        LD      (ERL),HL
+1056: 3935+4	072D' B7      	        OR      A
+1057: 3939+7+5	072E' 280B    	        JR      Z,ERROR2
+1058: 3946+16	0730' 2A0000  	        LD      HL,(ERRTRP)
+1059: 3962+4	0733' 7C      	        LD      A,H
+1060: 3966+4	0734' B5      	        OR      L
+1061: 3970+11	0735' E5      	        PUSH    HL
+1062: 3981+14	0736' FDE1    	        POP     IY
+1063: 3995+10	0738' C20000  	        JP      NZ,XEQ          ;ERROR TRAPPED
+1064: 4005+10	073B' 210000  	ERROR2: LD      HL,0
+1065: 4015+16	073E' 220000  	        LD      (AUTONO),HL
+1066: 4031+16	0741' 220000  	        LD      (TRACEN),HL     ;CANCEL TRACE
+1067: 4047+17	0744' CD0000  	        CALL    RESET           ;RESET OPSYS
+1068: 4064+17	0747' CD9908  	        CALL    CRLF
+1069: 4081+17	074A' CD4B0C  	        CALL    REPORT          ;MESSAGE
+1070: 4098+17	074D' CD1A09  	        CALL    SAYLN
+1071: 4115+7	0750' 1E00    	        LD      E,0
+1072: 4122+10+7	0752' DC0000  	        CALL    C,OSSHUT        ;CLOSE ALL FILES
+1073: 4132+17	0755' CD9908  	        CALL    CRLF
+1074: 4149+10	0758' C39B00  	        JP      CLOOP
+1076:				;
+1077:				;SUBROUTINES:
+1078:				;
+1079:				;
+1080:				;LEX - SEARCH FOR KEYWORDS
+1081:				;   Inputs: HL = start of keyword table
+1082:				;           IY = start of match text
+1083:				;  Outputs: If found, Z-flag set, A=token.
+1084:				;           If not found, Z-flag reset, A=(IY).
+1085:				;           IY updated (if NZ, IY unchanged).
+1086:				; Destroys: A,B,H,L,IY,F
+1087:				;
+1088: 4159+10	075B' 215901  	LEX:    LD      HL,KEYWDS
+1089: 4169+19	075E' FD7E00  	LEX0:   LD      A,(IY)
+1090: 4188+7	0761' 46      	        LD      B,(HL)
+1091: 4195+6	0762' 23      	        INC     HL
+1092: 4201+7	0763' BE      	        CP      (HL)
+1093: 4208+7+5	0764' 2808    	        JR      Z,LEX2
+1094: 4215+5+6	0766' D8      	        RET     C               ;FAIL EXIT
+1095: 4220+6	0767' 23      	LEX1:   INC     HL
+1096: 4226+12	0768' CB7E    	        BIT     7,(HL)
+1097: 4238+7+5	076A' 28FB    	        JR      Z,LEX1
+1098: 4245+12	076C' 18F0    	        JR      LEX0
+1099: 4257+15	076E' FDE5    	LEX2:   PUSH    IY              ;SAVE POINTER
+1100: 4272+6	0770' 23      	LEX3:   INC     HL
+1101: 4278+12	0771' CB7E    	        BIT     7,(HL)
+1102: 4290+7+5	0773' 201B    	        JR      NZ,LEX6         ;FOUND
+1103: 4297+10	0775' FD23    	        INC     IY
+1104: 4307+19	0777' FD7E00  	        LD      A,(IY)
+1105: 4326+7	077A' FE2E    	        CP      '.'
+1106: 4333+7+5	077C' 2812    	        JR      Z,LEX6          ;FOUND (ABBREV.)
+1107: 4340+7	077E' BE      	        CP      (HL)
+1108: 4347+7+5	077F' 28EF    	        JR      Z,LEX3
+1109: 4354+17	0781' CD5E0B  	        CALL    RANGE1
+1110: 4371+7+5	0784' 3804    	        JR      C,LEX5
+1111: 4378+14	0786' FDE1    	LEX4:   POP     IY              ;RESTORE POINTER
+1112: 4392+12	0788' 18DD    	        JR      LEX1
+1113: 4404+7	078A' 7E      	LEX5:   LD      A,(HL)
+1114: 4411+4	078B' B7      	        OR      A
+1115: 4415+7+5	078C' 20F8    	        JR      NZ,LEX4
+1116: 4422+10	078E' FD2B    	        DEC     IY
+1117: 4432+10	0790' F1      	LEX6:   POP     AF
+1118: 4442+4	0791' AF      	        XOR     A
+1119: 4446+4	0792' 78      	        LD      A,B
+1120: 4450+10	0793' C9      	        RET
+1121:				;
+1122:				;DEL - DELETE A PROGRAM LINE.
+1123:				;   Inputs: HL addresses program line.
+1124:				; Destroys: B,C,F
+1125:				;
+1126: 4460+11	0794' D5      	DEL:    PUSH    DE
+1127: 4471+11	0795' E5      	        PUSH    HL
+1128: 4482+11	0796' E5      	        PUSH    HL
+1129: 4493+7	0797' 0600    	        LD      B,0
+1130: 4500+7	0799' 4E      	        LD      C,(HL)
+1131: 4507+11	079A' 09      	        ADD     HL,BC
+1132: 4518+11	079B' E5      	        PUSH    HL
+1133: 4529+4	079C' EB      	        EX      DE,HL
+1134: 4533+16	079D' 2A0000  	        LD      HL,(TOP)
+1135: 4549+15	07A0' ED52    	        SBC     HL,DE
+1136: 4564+4	07A2' 44      	        LD      B,H
+1137: 4568+4	07A3' 4D      	        LD      C,L
+1138: 4572+10	07A4' E1      	        POP     HL
+1139: 4582+10	07A5' D1      	        POP     DE
+1140: 4592+16+5	07A6' EDB0    	        LDIR                    ;DELETE LINE
+1141: 4608+20	07A8' ED530000	        LD      (TOP),DE
+1142: 4628+10	07AC' E1      	        POP     HL
+1143: 4638+10	07AD' D1      	        POP     DE
+1144: 4648+10	07AE' C9      	        RET
+1145:				;
+1146:				;LOAD0 - LOAD A DISK FILE THEN CLEAN.
+1147:				;   Inputs: Filename in ACCS (term CR)
+1148:				; Destroys: A,B,C,D,E,H,L,F
+1149:				;
+1150:				;CLEAN - CHECK FOR BAD PROGRAM, FIND END OF TEXT
+1151:				; AND WRITE FF FF, THEN LOAD (TOP).
+1152:				; Destroys: A,B,C,H,L,F
+1153:				;
+1154: 4658+20	07AF' ED5B0000	LOAD0:  LD      DE,(PAGE)
+1155: 4678+10	07B3' 2100FF  	        LD      HL,-256
+1156: 4688+11	07B6' 39      	        ADD     HL,SP
+1157: 4699+15	07B7' ED52    	        SBC     HL,DE           ;FIND AVAILABLE SPACE
+1158: 4714+4	07B9' 44      	        LD      B,H
+1159: 4718+4	07BA' 4D      	        LD      C,L
+1160: 4722+10	07BB' 210000  	        LD      HL,ACCS
+1161: 4732+17	07BE' CD0000  	        CALL    OSLOAD          ;LOAD
+1162: 4749+10+7	07C1' D4F007  	        CALL    NC,NEWIT
+1163: 4759+7	07C4' 3E00    	        LD      A,0
+1164: 4766+10	07C6' D20707  	        JP      NC,ERROR        ;"No room"
+1165: 4776+17	07C9' CDD407  	CLEAN:  CALL    SETTOP
+1166: 4793+6	07CC' 2B      	        DEC     HL
+1167: 4799+10	07CD' 36FF    	        LD      (HL),-1         ;WRITE &FFFF
+1168: 4809+6	07CF' 2B      	        DEC     HL
+1169: 4815+10	07D0' 36FF    	        LD      (HL),-1
+1170: 4825+12	07D2' 1824    	        JR      CLEAR
+1171:				;
+1172: 4837+16	07D4' 2A0000  	SETTOP: LD      HL,(PAGE)
+1173: 4853+7	07D7' 0600    	        LD      B,0
+1174: 4860+7	07D9' 3E0D    	        LD      A,CR
+1175: 4867+7	07DB' 4E      	SETOP1: LD      C,(HL)
+1176: 4874+4	07DC' 0C      	        INC     C
+1177: 4878+4	07DD' 0D      	        DEC     C
+1178: 4882+7+5	07DE' 2809    	        JR      Z,SETOP2
+1179: 4889+11	07E0' 09      	        ADD     HL,BC
+1180: 4900+6	07E1' 2B      	        DEC     HL
+1181: 4906+7	07E2' BE      	        CP      (HL)
+1182: 4913+6	07E3' 23      	        INC     HL
+1183: 4919+7+5	07E4' 28F5    	        JR      Z,SETOP1
+1184: 4926+10	07E6' C3AF06  	        JP      BAD
+1185: 4936+6	07E9' 23      	SETOP2: INC     HL              ;N.B. CALLED FROM NEWIT
+1186: 4942+6	07EA' 23      	        INC     HL
+1187: 4948+6	07EB' 23      	        INC     HL
+1188: 4954+16	07EC' 220000  	        LD      (TOP),HL
+1189: 4970+10	07EF' C9      	        RET
+1190:				;
+1191:				;NEWIT - NEW PROGRAM THEN CLEAR
+1192:				;   Destroys: H,L
+1193:				;
+1194:				;CLEAR - CLEAR ALL DYNAMIC VARIABLES INCLUDING
+1195:				; FUNCTION AND PROCEDURE POINTERS.
+1196:				;   Destroys: Nothing
+1197:				;
+1198: 4980+16	07F0' 2A0000  	NEWIT:  LD      HL,(PAGE)
+1199: 4996+10	07F3' 3600    	        LD      (HL),0
+1200: 5006+17	07F5' CDE907  	        CALL    SETOP2
+1201: 5023+11	07F8' E5      	CLEAR:  PUSH    HL
+1202: 5034+16	07F9' 2A0000  	        LD      HL,(TOP)
+1203: 5050+16	07FC' 220000  	        LD      (LOMEM),HL
+1204: 5066+16	07FF' 220000  	        LD      (FREE),HL
+1205: 5082+10	0802' 210000  	        LD      HL,DYNVAR
+1206: 5092+11	0805' C5      	        PUSH    BC
+1207: 5103+7	0806' 0670    	        LD      B,2*(54+2)
+1208: 5110+10	0808' 3600    	CLEAR1: LD      (HL),0
+1209: 5120+6	080A' 23      	        INC     HL
+1210: 5126+8+5	080B' 10FB    	        DJNZ    CLEAR1
+1211: 5134+10	080D' C1      	        POP     BC
+1212: 5144+10	080E' E1      	        POP     HL
+1213: 5154+10	080F' C9      	        RET
+1214:				;
+1215:				;LISTIT - LIST A PROGRAM LINE.
+1216:				;    Inputs: HL addresses line
+1217:				;            DE = line number (binary)
+1218:				;            IX addresses LISTON
+1219:				;  Destroys: A,D,E,B',C',D',E',H',L',IY,F
+1220:				;
+1221: 5164+11	0810' E5      	LISTIT: PUSH    HL
+1222: 5175+4	0811' EB      	        EX      DE,HL
+1223: 5179+11	0812' C5      	        PUSH    BC
+1224: 5190+17	0813' CD3109  	        CALL    PBCD
+1225: 5207+10	0816' C1      	        POP     BC
+1226: 5217+10	0817' E1      	        POP     HL
+1227: 5227+7	0818' 7E      	        LD      A,(HL)
+1228: 5234+7	0819' FEED    	        CP      NEXT
+1229: 5241+10+7	081B' CC7C08  	        CALL    Z,INDENT
+1230: 5251+7	081E' FEFD    	        CP      UNTIL
+1231: 5258+10+7	0820' CC7C08  	        CALL    Z,INDENT
+1232: 5268+4	0823' D9      	        EXX
+1233: 5272+7	0824' 3E20    	        LD      A,' '
+1234: 5279+20	0826' DDCB0046	        BIT     0,(IX)
+1235: 5299+10+7	082A' C4A008  	        CALL    NZ,OUTCHR
+1236: 5309+4	082D' 78      	        LD      A,B
+1237: 5313+4	082E' 87      	        ADD     A,A
+1238: 5317+20	082F' DDCB004E	        BIT     1,(IX)
+1239: 5337+10+7	0833' C40000  	        CALL    NZ,FILL
+1240: 5347+4	0836' 79      	        LD      A,C
+1241: 5351+4	0837' 87      	        ADD     A,A
+1242: 5355+20	0838' DDCB0056	        BIT     2,(IX)
+1243: 5375+10+7	083C' C40000  	        CALL    NZ,FILL
+1244: 5385+4	083F' D9      	        EXX
+1245: 5389+7	0840' 7E      	        LD      A,(HL)
+1246: 5396+7	0841' FEE3    	        CP      FOR
+1247: 5403+10+7	0843' CC7C08  	        CALL    Z,INDENT
+1248: 5413+7	0846' FEF5    	        CP      REPEAT
+1249: 5420+10+7	0848' CC7C08  	        CALL    Z,INDENT
+1250: 5430+7	084B' 1E00    	        LD      E,0
+1251: 5437+7	084D' 7E      	LIST8:  LD      A,(HL)
+1252: 5444+6	084E' 23      	        INC     HL
+1253: 5450+7	084F' FE0D    	        CP      CR
+1254: 5457+7+5	0851' 2846    	        JR      Z,CRLF
+1255: 5464+7	0853' FE22    	        CP      '"'
+1256: 5471+7+5	0855' 2001    	        JR      NZ,LIST7
+1257: 5478+4	0857' 1C      	        INC     E
+1258: 5482+17	0858' CD7008  	LIST7:  CALL    LOUT
+1259: 5499+12	085B' 18F0    	        JR      LIST8
+1260:				;
+1261: 5511+11	085D' E5      	PRLINO: PUSH    HL
+1262: 5522+14	085E' FDE1    	        POP     IY
+1263: 5536+11	0860' C5      	        PUSH    BC
+1264: 5547+17	0861' CD0000  	        CALL    DECODE
+1265: 5564+10	0864' C1      	        POP     BC
+1266: 5574+4	0865' D9      	        EXX
+1267: 5578+11	0866' C5      	        PUSH    BC
+1268: 5589+17	0867' CD2D09  	        CALL    PBCDL
+1269: 5606+10	086A' C1      	        POP     BC
+1270: 5616+4	086B' D9      	        EXX
+1271: 5620+15	086C' FDE5    	        PUSH    IY
+1272: 5635+10	086E' E1      	        POP     HL
+1273: 5645+10	086F' C9      	        RET
+1274:				;
+1275: 5655+8	0870' CB43    	LOUT:   BIT     0,E
+1276: 5663+7+5	0872' 202C    	        JR      NZ,OUTCHR
+1277: 5670+7	0874' FE8D    	        CP      LINO
+1278: 5677+7+5	0876' 28E5    	        JR      Z,PRLINO
+1279: 5684+17	0878' CDB908  	        CALL    OUT
+1280: 5701+7	087B' 7E      	        LD      A,(HL)
+1281: 5708+4	087C' D9      	INDENT: EXX
+1282: 5712+7	087D' FEE3    	        CP      FOR
+1283: 5719+7+5	087F' 2808    	        JR      Z,IND1
+1284: 5726+7	0881' FEED    	        CP      NEXT
+1285: 5733+7+5	0883' 2005    	        JR      NZ,IND2
+1286: 5740+4	0885' 05      	        DEC     B
+1287: 5744+10	0886' F28A08  	        JP      P,IND2
+1288: 5754+4	0889' 04      	IND1:   INC     B
+1289: 5758+7	088A' FEF5    	IND2:   CP      REPEAT
+1290: 5765+7+5	088C' 2808    	        JR      Z,IND3
+1291: 5772+7	088E' FEFD    	        CP      UNTIL
+1292: 5779+7+5	0890' 2005    	        JR      NZ,IND4
+1293: 5786+4	0892' 0D      	        DEC     C
+1294: 5790+10	0893' F29708  	        JP      P,IND4
+1295: 5800+4	0896' 0C      	IND3:   INC     C
+1296: 5804+4	0897' D9      	IND4:   EXX
+1297: 5808+10	0898' C9      	        RET
+1298:				;
+1299:				;CRLF - SEND CARRIAGE RETURN, LINE FEED.
+1300:				;  Destroys: A,F
+1301:				;OUTCHR - OUTPUT A CHARACTER TO CONSOLE.
+1302:				;    Inputs: A = character
+1303:				;  Destroys: A,F
+1304:				;
+1305: 5818+7	0899' 3E0D    	CRLF:   LD      A,CR
+1306: 5825+17	089B' CDA008  	        CALL    OUTCHR
+1307: 5842+7	089E' 3E0A    	        LD      A,LF
+1308: 5849+17	08A0' CD0000  	OUTCHR: CALL    OSWRCH
+1309: 5866+7	08A3' D60D    	        SUB     CR
+1310: 5873+7+5	08A5' 2805    	        JR      Z,CARRET
+1311: 5880+5+6	08A7' D8      	        RET     C               ;NON-PRINTING
+1312: 5885+13	08A8' 3A0000  	        LD      A,(COUNT)
+1313: 5898+4	08AB' 3C      	        INC     A
+1314: 5902+13	08AC' 320000  	CARRET: LD      (COUNT),A
+1315: 5915+5+6	08AF' C8      	        RET     Z
+1316: 5920+11	08B0' E5      	        PUSH    HL
+1317: 5931+16	08B1' 2A0000  	        LD      HL,(WIDTH)
+1318: 5947+4	08B4' BD      	        CP      L
+1319: 5951+10	08B5' E1      	        POP     HL
+1320: 5961+5+6	08B6' C0      	        RET     NZ
+1321: 5966+12	08B7' 18E0    	        JR      CRLF
+1322:				;
+1323:				;OUT - SEND CHARACTER OR KEYWORD
+1324:				;   Inputs: A = character (>=10, <128)
+1325:				;           A = Token (<10, >=128)
+1326:				;  Destroys: A,F
+1327:				;
+1328: 5978+7	08B9' FE8A    	OUT:    CP      138
+1329: 5985+10	08BB' EAA008  	        JP      PE,OUTCHR
+1330: 5995+11	08BE' C5      	        PUSH    BC
+1331: 6006+11	08BF' E5      	        PUSH    HL
+1332: 6017+10	08C0' 215901  	        LD      HL,KEYWDS
+1333: 6027+10	08C3' 01DF02  	        LD      BC,KEYWDL
+1334: 6037+16+5	08C6' EDB1    	        CPIR
+1335: 6053+7	08C8' 7E      	TOKEN1: LD      A,(HL)
+1336: 6060+6	08C9' 23      	        INC     HL
+1337: 6066+7	08CA' FE8A    	        CP      138
+1338: 6073+11	08CC' F5      	        PUSH    AF
+1339: 6084+10+7	08CD' ECA008  	        CALL    PE,OUTCHR
+1340: 6094+10	08D0' F1      	        POP     AF
+1341: 6104+10	08D1' EAC808  	        JP      PE,TOKEN1
+1342: 6114+10	08D4' E1      	        POP     HL
+1343: 6124+10	08D5' C1      	        POP     BC
+1344: 6134+10	08D6' C9      	        RET
+1345:				;
+1346:				;FINDL - FIND PROGRAM LINE.
+1347:				;   Inputs: HL = line number (binary)
+1348:				;  Outputs: HL addresses line (if found)
+1349:				;           DE = line number
+1350:				;           Z-flag set if found.
+1351:				; Destroys: A,B,C,D,E,H,L,F
+1352:				;
+1353: 6144+4	08D7' EB      	FINDL:  EX      DE,HL
+1354: 6148+16	08D8' 2A0000  	        LD      HL,(PAGE)
+1355: 6164+4	08DB' AF      	        XOR     A               ;A=0
+1356: 6168+7	08DC' BE      	        CP      (HL)
+1357: 6175+4	08DD' 3C      	        INC     A
+1358: 6179+5+6	08DE' D0      	        RET     NC
+1359: 6184+4	08DF' AF      	        XOR     A               ;CLEAR CARRY
+1360: 6188+4	08E0' 47      	        LD      B,A
+1361: 6192+7	08E1' 4E      	FINDL1: LD      C,(HL)
+1362: 6199+11	08E2' E5      	        PUSH    HL
+1363: 6210+6	08E3' 23      	        INC     HL
+1364: 6216+7	08E4' 7E      	        LD      A,(HL)
+1365: 6223+6	08E5' 23      	        INC     HL
+1366: 6229+7	08E6' 66      	        LD      H,(HL)
+1367: 6236+4	08E7' 6F      	        LD      L,A
+1368: 6240+15	08E8' ED52    	        SBC     HL,DE
+1369: 6255+10	08EA' E1      	        POP     HL
+1370: 6265+5+6	08EB' D0      	        RET     NC              ;FOUND OR PAST
+1371: 6270+11	08EC' 09      	        ADD     HL,BC
+1372: 6281+10	08ED' C3E108  	        JP      FINDL1
+1373:				;
+1374:				;SETLIN - Search program for line containing address.
+1375:				;         Update (LINENO).
+1376:				;   Inputs: Address in (ERRLIN)
+1377:				;  Outputs: Line number in HL and (LINENO)
+1378:				; Destroys: B,C,D,E,H,L,F
+1379:				;
+1380: 6291+7	08F0' 0600    	SETLIN: LD      B,0
+1381: 6298+20	08F2' ED5B0000	        LD      DE,(ERRLIN)
+1382: 6318+16	08F6' 2A0000  	        LD      HL,(PAGE)
+1383: 6334+4	08F9' B7      	        OR      A
+1384: 6338+15	08FA' ED52    	        SBC     HL,DE
+1385: 6353+11	08FC' 19      	        ADD     HL,DE
+1386: 6364+7+5	08FD' 3016    	        JR      NC,SET3
+1387: 6371+7	08FF' 4E      	SET1:   LD      C,(HL)
+1388: 6378+4	0900' 0C      	        INC     C
+1389: 6382+4	0901' 0D      	        DEC     C
+1390: 6386+7+5	0902' 2811    	        JR      Z,SET3
+1391: 6393+11	0904' 09      	        ADD     HL,BC
+1392: 6404+15	0905' ED52    	        SBC     HL,DE
+1393: 6419+11	0907' 19      	        ADD     HL,DE
+1394: 6430+7+5	0908' 38F5    	        JR      C,SET1
+1395: 6437+15	090A' ED42    	        SBC     HL,BC
+1396: 6452+6	090C' 23      	        INC     HL
+1397: 6458+7	090D' 5E      	        LD      E,(HL)          ;LINE NUMBER
+1398: 6465+6	090E' 23      	        INC     HL
+1399: 6471+7	090F' 56      	        LD      D,(HL)
+1400: 6478+4	0910' EB      	        EX      DE,HL
+1401: 6482+16	0911' 220000  	SET2:   LD      (LINENO),HL
+1402: 6498+10	0914' C9      	        RET
+1403: 6508+10	0915' 210000  	SET3:   LD      HL,0
+1404: 6518+12	0918' 18F7    	        JR      SET2
+1405:				;
+1406:				;SAYLN - PRINT " at line nnnn" MESSAGE.
+1407:				;  Outputs: Carry=0 if line number is zero.
+1408:				;           Carry=1 if line number is non-zero.
+1409:				; Destroys: A,B,C,D,E,H,L,F
+1410:				;
+1411: 6530+16	091A' 2A0000  	SAYLN:  LD      HL,(LINENO)
+1412: 6546+4	091D' 7C      	        LD      A,H
+1413: 6550+4	091E' B5      	        OR      L
+1414: 6554+5+6	091F' C8      	        RET     Z
+1415: 6559+17	0920' CD570C  	        CALL    TELL
+1416:     -	0923' 20617420	        DEFM    ' at line '
+	              6C696E65
+	              20
+1417:     -	092C' 00      	        DEFB    0
+1418: 6576+7	092D' 0E00    	PBCDL:  LD      C,0
+1419: 6583+12	092F' 1802    	        JR      PBCD0
+1420:				;
+1421:				;PBCD - PRINT NUMBER AS DECIMAL INTEGER.
+1422:				;   Inputs: HL = number (binary).
+1423:				;  Outputs: Carry = 1
+1424:				; Destroys: A,B,C,D,E,H,L,F
+1425:				;
+1426: 6595+7	0931' 0E20    	PBCD:   LD      C,' '
+1427: 6602+7	0933' 0605    	PBCD0:  LD      B,5
+1428: 6609+10	0935' 111027  	        LD      DE,10000
+1429: 6619+4	0938' AF      	PBCD1:  XOR     A
+1430: 6623+15	0939' ED52    	PBCD2:  SBC     HL,DE
+1431: 6638+4	093B' 3C      	        INC     A
+1432: 6642+7+5	093C' 30FB    	        JR      NC,PBCD2
+1433: 6649+11	093E' 19      	        ADD     HL,DE
+1434: 6660+4	093F' 3D      	        DEC     A
+1435: 6664+7+5	0940' 2804    	        JR      Z,PBCD3
+1436: 6671+8	0942' CBE1    	        SET     4,C
+1437: 6679+8	0944' CBE9    	        SET     5,C
+1438: 6687+4	0946' B1      	PBCD3:  OR      C
+1439: 6691+10+7	0947' C4A008  	        CALL    NZ,OUTCHR
+1440: 6701+4	094A' 78      	        LD      A,B
+1441: 6705+7	094B' FE05    	        CP      5
+1442: 6712+7+5	094D' 2806    	        JR      Z,PBCD4
+1443: 6719+11	094F' 29      	        ADD     HL,HL
+1444: 6730+4	0950' 54      	        LD      D,H
+1445: 6734+4	0951' 5D      	        LD      E,L
+1446: 6738+11	0952' 29      	        ADD     HL,HL
+1447: 6749+11	0953' 29      	        ADD     HL,HL
+1448: 6760+11	0954' 19      	        ADD     HL,DE
+1449: 6771+10	0955' 11E803  	PBCD4:  LD      DE,1000
+1450: 6781+8+5	0958' 10DE    	        DJNZ    PBCD1
+1451: 6789+4	095A' 37      	        SCF
+1452: 6793+10	095B' C9      	        RET
+1453:				;
+1454:				;PUTVAR - CREATE VARIABLE AND INITIALISE TO ZERO.
+1455:				;   Inputs: HL, IY as returned from GETVAR (NZ).
+1456:				;  Outputs: As GETVAR.
+1457:				; Destroys: everything
+1458:				;
+1459: 6803+17	095C' CDA90A  	PUTVAR: CALL    CREATE
+1460: 6820+19	095F' FD7E00  	        LD      A,(IY)
+1461: 6839+7	0962' FE28    	        CP      '('
+1462: 6846+7+5	0964' 2068    	        JR      NZ,GETVZ        ;SET EXIT CONDITIONS
+1463: 6853+7	0966' 3E0E    	ARRAY:  LD      A,14            ;'Array'
+1464: 6860+10	0968' C30707  	ERROR3: JP      ERROR
+1465:				;
+1466:				;GETVAR - GET LOCATION OF VARIABLE, RETURN IN HL & IX
+1467:				;   Inputs: IY addresses first character.
+1468:				;  Outputs: Carry set and NZ if illegal character.
+1469:				;           Z-flag set if variable found, then:
+1470:				;            A = variable type (0,4,5,128 or 129)
+1471:				;            HL = IX = variable pointer.
+1472:				;            IY updated
+1473:				;           If Z-flag & carry reset, then:
+1474:				;            HL, IY set for subsequent PUTVAR call.
+1475:				; Destroys: everything
+1476:				;
+1477: 6870+19	096B' FD7E00  	GETVAR: LD      A,(IY)
+1478: 6889+7	096E' FE24    	        CP      '$'
+1479: 6896+7+5	0970' 2862    	        JR      Z,GETV4
+1480: 6903+7	0972' FE21    	        CP      '!'
+1481: 6910+7+5	0974' 2862    	        JR      Z,GETV5
+1482: 6917+7	0976' FE3F    	        CP      '?'
+1483: 6924+7+5	0978' 2862    	        JR      Z,GETV6
+1484: 6931+17	097A' CD210A  	        CALL    LOCATE
+1485: 6948+5+6	097D' C0      	        RET     NZ
+1486: 6953+19	097E' FD7E00  	        LD      A,(IY)
+1487: 6972+7	0981' FE28    	        CP      '('             ;ARRAY?
+1488: 6979+7+5	0983' 2041    	        JR      NZ,GETVX        ;EXIT
+1489: 6986+11	0985' D5      	        PUSH    DE              ;SAVE TYPE
+1490: 6997+7	0986' 7E      	        LD      A,(HL)          ;NO. OF DIMENSIONS
+1491: 7004+4	0987' B7      	        OR      A
+1492: 7008+7+5	0988' 28DC    	        JR      Z,ARRAY
+1493: 7015+6	098A' 23      	        INC     HL
+1494: 7021+10	098B' 110000  	        LD      DE,0            ;ACCUMULATOR
+1495: 7031+11	098E' F5      	        PUSH    AF
+1496: 7042+10	098F' FD23    	        INC     IY              ;SKIP (
+1497: 7052+12	0991' 1804    	        JR      GETV3
+1498: 7064+11	0993' F5      	GETV2:  PUSH    AF
+1499: 7075+17	0994' CD0000  	        CALL    COMMA
+1500: 7092+11	0997' E5      	GETV3:  PUSH    HL
+1501: 7103+11	0998' D5      	        PUSH    DE
+1502: 7114+17	0999' CD0000  	        CALL    EXPRI           ;SUBSCRIPT
+1503: 7131+4	099C' D9      	        EXX
+1504: 7135+10	099D' D1      	        POP     DE
+1505: 7145+19	099E' E3      	        EX      (SP),HL
+1506: 7164+7	099F' 4E      	        LD      C,(HL)
+1507: 7171+6	09A0' 23      	        INC     HL
+1508: 7177+7	09A1' 46      	        LD      B,(HL)
+1509: 7184+6	09A2' 23      	        INC     HL
+1510: 7190+19	09A3' E3      	        EX      (SP),HL
+1511: 7209+4	09A4' EB      	        EX      DE,HL
+1512: 7213+11	09A5' D5      	        PUSH    DE
+1513: 7224+17	09A6' CD0000  	        CALL    MUL16           ;HL=HL*BC
+1514: 7241+10	09A9' D1      	        POP     DE
+1515: 7251+11	09AA' 19      	        ADD     HL,DE
+1516: 7262+4	09AB' EB      	        EX      DE,HL
+1517: 7266+4	09AC' B7      	        OR      A
+1518: 7270+15	09AD' ED42    	        SBC     HL,BC
+1519: 7285+7	09AF' 3E0F    	        LD      A,15
+1520: 7292+7+5	09B1' 30B5    	        JR      NC,ERROR3       ;"Subscript"
+1521: 7299+10	09B3' E1      	        POP     HL
+1522: 7309+10	09B4' F1      	        POP     AF
+1523: 7319+4	09B5' 3D      	        DEC     A               ;DIMENSION COUNTER
+1524: 7323+7+5	09B6' 20DB    	        JR      NZ,GETV2
+1525: 7330+17	09B8' CD0000  	        CALL    BRAKET          ;CLOSING BRACKET
+1526: 7347+10	09BB' F1      	        POP     AF              ;RESTORE TYPE
+1527: 7357+11	09BC' E5      	        PUSH    HL
+1528: 7368+17	09BD' CD0000  	        CALL    X4OR5           ;DE=DE*n
+1529: 7385+10	09C0' E1      	        POP     HL
+1530: 7395+11	09C1' 19      	        ADD     HL,DE
+1531: 7406+4	09C2' 57      	        LD      D,A             ;TYPE
+1532: 7410+19	09C3' FD7E00  	        LD      A,(IY)
+1533: 7429+7	09C6' FE3F    	GETVX:  CP      '?'
+1534: 7436+7+5	09C8' 281D    	        JR      Z,GETV9
+1535: 7443+7	09CA' FE21    	        CP      '!'
+1536: 7450+7+5	09CC' 2815    	        JR      Z,GETV8
+1537: 7457+11	09CE' E5      	GETVZ:  PUSH    HL              ;SET EXIT CONDITIONS
+1538: 7468+14	09CF' DDE1    	        POP     IX
+1539: 7482+4	09D1' 7A      	        LD      A,D
+1540: 7486+4	09D2' BF      	        CP      A
+1541: 7490+10	09D3' C9      	        RET
+1542:				;
+1543:				;PROCESS UNARY & BINARY INDIRECTION:
+1544:				;
+1545: 7500+7	09D4' 3E80    	GETV4:  LD      A,128           ;STATIC STRING
+1546: 7507+12	09D6' 1805    	        JR      GETV7
+1547: 7519+7	09D8' 3E04    	GETV5:  LD      A,4             ;UNARY 32-BIT INDIRN.
+1548: 7526+12	09DA' 1801    	        JR      GETV7
+1549: 7538+4	09DC' AF      	GETV6:  XOR     A               ;UNARY 8-BIT INDIRECTION
+1550: 7542+10	09DD' 210000  	GETV7:  LD      HL,0
+1551: 7552+11	09E0' F5      	        PUSH    AF
+1552: 7563+12	09E1' 1815    	        JR      GETV0
+1553:				;
+1554: 7575+7	09E3' 0604    	GETV8:  LD      B,4             ;32-BIT BINARY INDIRN.
+1555: 7582+12	09E5' 1802    	        JR      GETVA
+1556: 7594+7	09E7' 0600    	GETV9:  LD      B,0             ;8-BIT BINARY INDIRN.
+1557: 7601+11	09E9' E5      	GETVA:  PUSH    HL
+1558: 7612+14	09EA' DDE1    	        POP     IX
+1559: 7626+4	09EC' 7A      	        LD      A,D             ;TYPE
+1560: 7630+7	09ED' FE81    	        CP      129
+1561: 7637+5+6	09EF' C8      	        RET     Z               ;STRING!
+1562: 7642+11	09F0' C5      	        PUSH    BC
+1563: 7653+17	09F1' CD0000  	        CALL    LOADN           ;LEFT OPERAND
+1564: 7670+17	09F4' CD0000  	        CALL    SFIX
+1565: 7687+4	09F7' D9      	        EXX
+1566: 7691+11	09F8' E5      	GETV0:  PUSH    HL
+1567: 7702+10	09F9' FD23    	        INC     IY
+1568: 7712+17	09FB' CD0000  	        CALL    ITEMI
+1569: 7729+4	09FE' D9      	        EXX
+1570: 7733+10	09FF' D1      	        POP     DE
+1571: 7743+10	0A00' F1      	        POP     AF
+1572: 7753+11	0A01' 19      	        ADD     HL,DE
+1573: 7764+11	0A02' E5      	        PUSH    HL
+1574: 7775+14	0A03' DDE1    	        POP     IX
+1575: 7789+4	0A05' BF      	        CP      A
+1576: 7793+10	0A06' C9      	        RET
+1577:				;
+1578:				;GETDEF - Find entry for FN or PROC in dynamic area.
+1579:				;   Inputs: IY addresses byte following "DEF" token.
+1580:				;  Outputs: Z flag set if found
+1581:				;           Carry set if neither FN or PROC first.
+1582:				;           If Z: HL points to entry
+1583:				;                 IY addresses delimiter
+1584:				; Destroys: A,D,E,H,L,IY,F
+1585:				;
+1586: 7803+19	0A07' FD7E01  	GETDEF: LD      A,(IY+1)
+1587: 7822+17	0A0A' CD5E0B  	        CALL    RANGE1
+1588: 7839+5+6	0A0D' D8      	        RET     C
+1589: 7844+19	0A0E' FD7E00  	        LD      A,(IY)
+1590: 7863+10	0A11' 210000  	        LD      HL,FNPTR
+1591: 7873+7	0A14' FEA4    	        CP      FN
+1592: 7880+7+5	0A16' 2843    	        JR      Z,LOC2
+1593: 7887+10	0A18' 210000  	        LD      HL,PROPTR
+1594: 7897+7	0A1B' FEF2    	        CP      PROC
+1595: 7904+7+5	0A1D' 283C    	        JR      Z,LOC2
+1596: 7911+4	0A1F' 37      	        SCF
+1597: 7915+10	0A20' C9      	        RET
+1598:				;
+1599:				;LOCATE - Try to locate variable name in static or
+1600:				;dynamic variables.  If illegal first character return
+1601:				;carry, non-zero.  If found, return no-carry, zero.
+1602:				;If not found, return no-carry, non-zero.
+1603:				;   Inputs: IY addresses first character of name.
+1604:				;           A=(IY)
+1605:				;  Outputs: Z-flag set if found, then:
+1606:				;            IY addresses terminator
+1607:				;            HL addresses location of variable
+1608:				;            D=type of variable:  4 = integer
+1609:				;                                 5 = floating point
+1610:				;                               129 = string
+1611:				; Destroys: A,D,E,H,L,IY,F
+1612:				;
+1613: 7925+7	0A21' D640    	LOCATE: SUB     '@'
+1614: 7932+5+6	0A23' D8      	        RET     C
+1615: 7937+7	0A24' 2600    	        LD      H,0
+1616: 7944+7	0A26' FE1B    	        CP      'Z'-'@'+1
+1617: 7951+7+5	0A28' 301D    	        JR      NC,LOC0         ;NOT STATIC
+1618: 7958+4	0A2A' 87      	        ADD     A,A
+1619: 7962+4	0A2B' 6F      	        LD      L,A
+1620: 7966+19	0A2C' FD7E01  	        LD      A,(IY+1)        ;2nd CHARACTER
+1621: 7985+7	0A2F' FE25    	        CP      '%'
+1622: 7992+7+5	0A31' 2020    	        JR      NZ,LOC1         ;NOT STATIC
+1623: 7999+19	0A33' FD7E02  	        LD      A,(IY+2)
+1624: 8018+7	0A36' FE28    	        CP      '('
+1625: 8025+7+5	0A38' 2819    	        JR      Z,LOC1          ;NOT STATIC
+1626: 8032+11	0A3A' 29      	        ADD     HL,HL
+1627: 8043+10	0A3B' 110000  	        LD      DE,STAVAR       ;STATIC VARIABLES
+1628: 8053+11	0A3E' 19      	        ADD     HL,DE
+1629: 8064+10	0A3F' FD23    	        INC     IY
+1630: 8074+10	0A41' FD23    	        INC     IY
+1631: 8084+7	0A43' 1604    	        LD      D,4             ;INTEGER TYPE
+1632: 8091+4	0A45' AF      	        XOR     A
+1633: 8095+10	0A46' C9      	        RET
+1634:				;
+1635: 8105+7	0A47' FE1F    	LOC0:   CP      '_'-'@'
+1636: 8112+5+6	0A49' D8      	        RET     C
+1637: 8117+7	0A4A' FE3B    	        CP      'z'-'@'+1
+1638: 8124+4	0A4C' 3F      	        CCF
+1639: 8128+4	0A4D' 3D      	        DEC     A               ;SET NZ
+1640: 8132+5+6	0A4E' D8      	        RET     C
+1641: 8137+7	0A4F' D603    	        SUB     3
+1642: 8144+4	0A51' 87      	        ADD     A,A
+1643: 8148+4	0A52' 6F      	        LD      L,A
+1644: 8152+10	0A53' 110000  	LOC1:   LD      DE,DYNVAR       ;DYNAMIC VARIABLES
+1645: 8162+4	0A56' 2D      	        DEC     L
+1646: 8166+4	0A57' 2D      	        DEC     L
+1647: 8170+4	0A58' 37      	        SCF
+1648: 8174+5+6	0A59' F8      	        RET     M
+1649: 8179+11	0A5A' 19      	        ADD     HL,DE
+1650: 8190+7	0A5B' 5E      	LOC2:   LD      E,(HL)
+1651: 8197+6	0A5C' 23      	        INC     HL
+1652: 8203+7	0A5D' 56      	        LD      D,(HL)
+1653: 8210+4	0A5E' 7A      	        LD      A,D
+1654: 8214+4	0A5F' B3      	        OR      E
+1655: 8218+7+5	0A60' 2845    	        JR      Z,LOC6          ;UNDEFINED VARIABLE
+1656: 8225+4	0A62' 62      	        LD      H,D
+1657: 8229+4	0A63' 6B      	        LD      L,E
+1658: 8233+6	0A64' 23      	        INC     HL              ;SKIP LINK
+1659: 8239+6	0A65' 23      	        INC     HL
+1660: 8245+15	0A66' FDE5    	        PUSH    IY
+1661: 8260+7	0A68' 7E      	LOC3:   LD      A,(HL)          ;COMPARE
+1662: 8267+6	0A69' 23      	        INC     HL
+1663: 8273+10	0A6A' FD23    	        INC     IY
+1664: 8283+19	0A6C' FDBE00  	        CP      (IY)
+1665: 8302+7+5	0A6F' 28F7    	        JR      Z,LOC3
+1666: 8309+4	0A71' B7      	        OR      A               ;0=TERMINATOR
+1667: 8313+7+5	0A72' 2806    	        JR      Z,LOC5          ;FOUND (MAYBE)
+1668: 8320+14	0A74' FDE1    	LOC4:   POP     IY
+1669: 8334+4	0A76' EB      	        EX      DE,HL
+1670: 8338+10	0A77' C35B0A  	        JP      LOC2            ;TRY NEXT ENTRY
+1671:				;
+1672: 8348+10	0A7A' FD2B    	LOC5:   DEC     IY
+1673: 8358+19	0A7C' FD7E00  	        LD      A,(IY)
+1674: 8377+7	0A7F' FE28    	        CP      '('
+1675: 8384+7+5	0A81' 2813    	        JR      Z,LOC5A         ;FOUND
+1676: 8391+10	0A83' FD23    	        INC     IY
+1677: 8401+17	0A85' CD520B  	        CALL    RANGE
+1678: 8418+7+5	0A88' 380C    	        JR      C,LOC5A         ;FOUND
+1679: 8425+7	0A8A' FE28    	        CP      '('
+1680: 8432+7+5	0A8C' 28E6    	        JR      Z,LOC4          ;KEEP LOOKING
+1681: 8439+19	0A8E' FD7EFF  	        LD      A,(IY-1)
+1682: 8458+17	0A91' CD5E0B  	        CALL    RANGE1
+1683: 8475+7+5	0A94' 30DE    	        JR      NC,LOC4         ;KEEP LOOKING
+1684: 8482+10	0A96' D1      	LOC5A:  POP     DE
+1685: 8492+19	0A97' FD7EFF  	TYPE:   LD      A,(IY-1)
+1686: 8511+7	0A9A' FE24    	        CP      '$'
+1687: 8518+7	0A9C' 1681    	        LD      D,129
+1688: 8525+5+6	0A9E' C8      	        RET     Z               ;STRING
+1689: 8530+7	0A9F' FE25    	        CP      '%'
+1690: 8537+7	0AA1' 1604    	        LD      D,4
+1691: 8544+5+6	0AA3' C8      	        RET     Z               ;INTEGER
+1692: 8549+4	0AA4' 14      	        INC     D
+1693: 8553+4	0AA5' BF      	        CP      A
+1694: 8557+10	0AA6' C9      	        RET
+1695:				;
+1696: 8567+4	0AA7' 3C      	LOC6:   INC     A               ;SET NZ
+1697: 8571+10	0AA8' C9      	        RET
+1698:				;
+1699:				;CREATE - CREATE NEW ENTRY, INITIALISE TO ZERO.
+1700:				;   Inputs: HL, IY as returned from LOCATE (NZ).
+1701:				;  Outputs: As LOCATE, GETDEF.
+1702:				; Destroys: As LOCATE, GETDEF.
+1703:				;
+1704: 8581+4	0AA9' AF      	CREATE: XOR     A
+1705: 8585+20	0AAA' ED5B0000	        LD      DE,(FREE)
+1706: 8605+7	0AAE' 72      	        LD      (HL),D
+1707: 8612+6	0AAF' 2B      	        DEC     HL
+1708: 8618+7	0AB0' 73      	        LD      (HL),E
+1709: 8625+4	0AB1' EB      	        EX      DE,HL
+1710: 8629+7	0AB2' 77      	        LD      (HL),A
+1711: 8636+6	0AB3' 23      	        INC     HL
+1712: 8642+7	0AB4' 77      	        LD      (HL),A
+1713: 8649+6	0AB5' 23      	        INC     HL
+1714: 8655+10	0AB6' FD23    	LOC7:   INC     IY
+1715: 8665+17	0AB8' CD520B  	        CALL    RANGE           ;END OF VARIABLE?
+1716: 8682+7+5	0ABB' 3814    	        JR      C,LOC8
+1717: 8689+7	0ABD' 77      	        LD      (HL),A
+1718: 8696+6	0ABE' 23      	        INC     HL
+1719: 8702+17	0ABF' CD5E0B  	        CALL    RANGE1
+1720: 8719+7+5	0AC2' 30F2    	        JR      NC,LOC7
+1721: 8726+7	0AC4' FE28    	        CP      '('
+1722: 8733+7+5	0AC6' 2809    	        JR      Z,LOC8
+1723: 8740+19	0AC8' FD7E01  	        LD      A,(IY+1)
+1724: 8759+7	0ACB' FE28    	        CP      '('
+1725: 8766+7+5	0ACD' 28E7    	        JR      Z,LOC7
+1726: 8773+10	0ACF' FD23    	        INC     IY
+1727: 8783+10	0AD1' 3600    	LOC8:   LD      (HL),0          ;TERMINATOR
+1728: 8793+6	0AD3' 23      	        INC     HL
+1729: 8799+11	0AD4' E5      	        PUSH    HL
+1730: 8810+17	0AD5' CD970A  	        CALL    TYPE
+1731: 8827+7	0AD8' 3E05    	        LD      A,5
+1732: 8834+4	0ADA' BA      	        CP      D
+1733: 8838+7+5	0ADB' 2801    	        JR      Z,LOC9
+1734: 8845+4	0ADD' 3D      	        DEC     A
+1735: 8849+10	0ADE' 3600    	LOC9:   LD      (HL),0          ;INITIALISE TO ZERO
+1736: 8859+6	0AE0' 23      	        INC     HL
+1737: 8865+4	0AE1' 3D      	        DEC     A
+1738: 8869+7+5	0AE2' 20FA    	        JR      NZ,LOC9
+1739: 8876+16	0AE4' 220000  	        LD      (FREE),HL
+1740: 8892+17	0AE7' CD0000  	        CALL    CHECK
+1741: 8909+10	0AEA' E1      	        POP     HL
+1742: 8919+4	0AEB' AF      	        XOR     A
+1743: 8923+10	0AEC' C9      	        RET
+1744:				;
+1745:				;LINNUM - GET LINE NUMBER FROM TEXT STRING
+1746:				;   Inputs: IY = Text Pointer
+1747:				;  Outputs: HL = Line number (zero if none)
+1748:				;           IY updated
+1749:				; Destroys: A,D,E,H,L,IY,F
+1750:				;
+1751: 8933+17	0AED' CD0000  	LINNUM: CALL    NXT
+1752: 8950+10	0AF0' 210000  	        LD      HL,0
+1753: 8960+19	0AF3' FD7E00  	LINNM1: LD      A,(IY)
+1754: 8979+7	0AF6' D630    	        SUB     '0'
+1755: 8986+5+6	0AF8' D8      	        RET     C
+1756: 8991+7	0AF9' FE0A    	        CP      10
+1757: 8998+5+6	0AFB' D0      	        RET     NC
+1758: 9003+10	0AFC' FD23    	        INC     IY
+1759: 9013+4	0AFE' 54      	        LD      D,H
+1760: 9017+4	0AFF' 5D      	        LD      E,L
+1761: 9021+11	0B00' 29      	        ADD     HL,HL           ;*2
+1762: 9032+7+5	0B01' 380F    	        JR      C,TOOBIG
+1763: 9039+11	0B03' 29      	        ADD     HL,HL           ;*4
+1764: 9050+7+5	0B04' 380C    	        JR      C,TOOBIG
+1765: 9057+11	0B06' 19      	        ADD     HL,DE           ;*5
+1766: 9068+7+5	0B07' 3809    	        JR      C,TOOBIG
+1767: 9075+11	0B09' 29      	        ADD     HL,HL           ;*10
+1768: 9086+7+5	0B0A' 3806    	        JR      C,TOOBIG
+1769: 9093+4	0B0C' 5F      	        LD      E,A
+1770: 9097+7	0B0D' 1600    	        LD      D,0
+1771: 9104+11	0B0F' 19      	        ADD     HL,DE           ;ADD IN DIGIT
+1772: 9115+7+5	0B10' 30E1    	        JR      NC,LINNM1       
+1773: 9122+7	0B12' 3E14    	TOOBIG: LD      A,20
+1774: 9129+10	0B14' C30707  	        JP      ERROR           ;"Too big"
+1775:				;
+1776:				;PAIR - GET PAIR OF LINE NUMBERS FOR RENUMBER/AUTO.
+1777:				;   Inputs: IY = text pointer
+1778:				;  Outputs: HL = first number (10 by default)
+1779:				;           BC = second number (10 by default)
+1780:				; Destroys: A,B,C,D,E,H,L,B',C',D',E',H',L',IY,F
+1781:				;
+1782: 9139+17	0B17' CDED0A  	PAIR:   CALL    LINNUM          ;FIRST
+1783: 9156+4	0B1A' 7C      	        LD      A,H
+1784: 9160+4	0B1B' B5      	        OR      L
+1785: 9164+7+5	0B1C' 2002    	        JR      NZ,PAIR1
+1786: 9171+7	0B1E' 2E0A    	        LD      L,10
+1787: 9178+17	0B20' CD0000  	PAIR1:  CALL    TERM?
+1788: 9195+10	0B23' FD23    	        INC     IY
+1789: 9205+11	0B25' E5      	        PUSH    HL
+1790: 9216+10	0B26' 210A00  	        LD      HL,10
+1791: 9226+10+7	0B29' C4ED0A  	        CALL    NZ,LINNUM       ;SECOND
+1792: 9236+19	0B2C' E3      	        EX      (SP),HL
+1793: 9255+10	0B2D' C1      	        POP     BC
+1794: 9265+4	0B2E' 78      	        LD      A,B
+1795: 9269+4	0B2F' B1      	        OR      C
+1796: 9273+5+6	0B30' C0      	        RET     NZ
+1797: 9278+17	0B31' CD1C07  	        CALL    EXTERR
+1798:     -	0B34' 53696C6C	        DEFM    'Silly'
+	              79
+1799:     -	0B39' 00      	        DEFB    0
+1800:				;
+1801:				;DLPAIR - GET PAIR OF LINE NUMBERS FOR DELETE/LIST.
+1802:				;   Inputs: IY = text pointer
+1803:				;  Outputs: HL = points to program text
+1804:				;           BC = second number (0 by default)
+1805:				; Destroys: A,B,C,D,E,H,L,IY,F
+1806:				;
+1807: 9295+17	0B3A' CDED0A  	DLPAIR: CALL    LINNUM
+1808: 9312+11	0B3D' E5      	        PUSH    HL
+1809: 9323+17	0B3E' CD0000  	        CALL    TERM?
+1810: 9340+7+5	0B41' 2809    	        JR      Z,DLP1
+1811: 9347+7	0B43' FEE7    	        CP      TIF
+1812: 9354+7+5	0B45' 2805    	        JR      Z,DLP1
+1813: 9361+10	0B47' FD23    	        INC     IY
+1814: 9371+17	0B49' CDED0A  	        CALL    LINNUM
+1815: 9388+19	0B4C' E3      	DLP1:   EX      (SP),HL
+1816: 9407+17	0B4D' CDD708  	        CALL    FINDL
+1817: 9424+10	0B50' C1      	        POP     BC
+1818: 9434+10	0B51' C9      	        RET
+1819:				;
+1820:				;TEST FOR VALID CHARACTER IN VARIABLE NAME:
+1821:				;   Inputs: IY addresses character
+1822:				;  Outputs: Carry set if out-of-range.
+1823:				; Destroys: A,F
+1824:				;
+1825: 9444+19	0B52' FD7E00  	RANGE:  LD      A,(IY)
+1826: 9463+7	0B55' FE24    	        CP      '$'
+1827: 9470+5+6	0B57' C8      	        RET     Z
+1828: 9475+7	0B58' FE25    	        CP      '%'
+1829: 9482+5+6	0B5A' C8      	        RET     Z
+1830: 9487+7	0B5B' FE28    	        CP      '('
+1831: 9494+5+6	0B5D' C8      	        RET     Z
+1832: 9499+7	0B5E' FE30    	RANGE1: CP      '0'
+1833: 9506+5+6	0B60' D8      	        RET     C
+1834: 9511+7	0B61' FE3A    	        CP      '9'+1
+1835: 9518+4	0B63' 3F      	        CCF
+1836: 9522+5+6	0B64' D0      	        RET     NC
+1837: 9527+7	0B65' FE40    	        CP      '@'             ;V2.4
+1838: 9534+5+6	0B67' C8      	        RET     Z
+1839: 9539+7	0B68' FE41    	RANGE2: CP      'A'
+1840: 9546+5+6	0B6A' D8      	        RET     C
+1841: 9551+7	0B6B' FE5B    	        CP      'Z'+1
+1842: 9558+4	0B6D' 3F      	        CCF
+1843: 9562+5+6	0B6E' D0      	        RET     NC
+1844: 9567+7	0B6F' FE5F    	        CP      '_'
+1845: 9574+5+6	0B71' D8      	        RET     C
+1846: 9579+7	0B72' FE7B    	        CP      'z'+1
+1847: 9586+4	0B74' 3F      	        CCF
+1848: 9590+10	0B75' C9      	        RET
+1849:				;
+1850: 9600+4	0B76' AF      	SPACE:  XOR     A
+1851: 9604+17	0B77' CD1C07  	        CALL    EXTERR          ;"LINE space"
+1852:     -	0B7A' 86      	        DEFB    LINE
+1853:     -	0B7B' 08      	        DEFB    8
+1854:     -	0B7C' 00      	        DEFB    0
+1855:				;
+1856:				;LEXAN - LEXICAL ANALYSIS.
+1857:				;  Bit 0,C: 1=left, 0=right
+1858:				;  Bit 3,C: 1=in HEX
+1859:				;  Bit 4,C: 1=accept line number
+1860:				;  Bit 5,C: 1=in variable, FN, PROC
+1861:				;  Bit 6,C: 1=in REM, DATA, *
+1862:				;  Bit 7,C: 1=in quotes
+1863:				;   Inputs: IY addresses source string
+1864:				;           DE addresses destination string
+1865:				;           (must be page boundary)
+1866:				;           C  sets initial mode
+1867:				;  Outputs: DE, IY updated
+1868:				;           A holds carriage return
+1869:				;
+1870: 9621+7	0B7D' 12      	LEXAN1: LD      (DE),A          ;TRANSFER TO BUFFER
+1871: 9628+6	0B7E' 13      	        INC     DE              ;INCREMENT POINTERS
+1872: 9634+10	0B7F' FD23    	        INC     IY
+1873: 9644+4	0B81' 7B      	LEXAN2: LD      A,E             ;MAIN ENTRY
+1874: 9648+7	0B82' FEFC    	        CP      252             ;TEST LENGTH
+1875: 9655+7+5	0B84' 30F0    	        JR      NC,SPACE        ;LINE TOO LONG
+1876: 9662+19	0B86' FD7E00  	        LD      A,(IY)
+1877: 9681+7	0B89' FE0D    	        CP      CR
+1878: 9688+5+6	0B8B' C8      	        RET     Z               ;END OF LINE
+1879: 9693+17	0B8C' CD5E0B  	        CALL    RANGE1
+1880: 9710+7+5	0B8F' 3004    	        JR      NC,LEXAN3
+1881: 9717+8	0B91' CBA9    	        RES     5,C             ;NOT IN VARIABLE
+1882: 9725+8	0B93' CB99    	        RES     3,C             ;NOT IN HEX
+1883: 9733+7	0B95' FE20    	LEXAN3: CP      ' '
+1884: 9740+7+5	0B97' 28E4    	        JR      Z,LEXAN1        ;PASS SPACES
+1885: 9747+7	0B99' FE2C    	        CP      ','
+1886: 9754+7+5	0B9B' 28E0    	        JR      Z,LEXAN1        ;PASS COMMAS
+1887: 9761+7	0B9D' FE47    	        CP      'G'
+1888: 9768+7+5	0B9F' 3802    	        JR      C,LEXAN4
+1889: 9775+8	0BA1' CB99    	        RES     3,C             ;NOT IN HEX
+1890: 9783+7	0BA3' FE22    	LEXAN4: CP      '"'
+1891: 9790+7+5	0BA5' 2005    	        JR      NZ,LEXAN5
+1892: 9797+8	0BA7' CB11    	        RL      C
+1893: 9805+4	0BA9' 3F      	        CCF                     ;TOGGLE C7
+1894: 9809+8	0BAA' CB19    	        RR      C
+1895: 9817+8	0BAC' CB61    	LEXAN5: BIT     4,C
+1896: 9825+7+5	0BAE' 2810    	        JR      Z,LEXAN6
+1897: 9832+8	0BB0' CBA1    	        RES     4,C
+1898: 9840+11	0BB2' C5      	        PUSH    BC
+1899: 9851+11	0BB3' D5      	        PUSH    DE
+1900: 9862+17	0BB4' CDED0A  	        CALL    LINNUM          ;GET LINE NUMBER
+1901: 9879+10	0BB7' D1      	        POP     DE
+1902: 9889+10	0BB8' C1      	        POP     BC
+1903: 9899+4	0BB9' 7C      	        LD      A,H
+1904: 9903+4	0BBA' B5      	        OR      L
+1905: 9907+10+7	0BBB' C4250C  	        CALL    NZ,ENCODE       ;ENCODE LINE NUMBER
+1906: 9917+12	0BBE' 18C1    	        JR      LEXAN2          ;CONTINUE
+1907:				;
+1908: 9929+4	0BC0' 0D      	LEXAN6: DEC     C
+1909: 9933+7+5	0BC1' 2809    	        JR      Z,LEXAN7        ;C=1 (LEFT)
+1910: 9940+4	0BC3' 0C      	        INC     C
+1911: 9944+7+5	0BC4' 20B7    	        JR      NZ,LEXAN1
+1912: 9951+4	0BC6' B7      	        OR      A
+1913: 9955+10+7	0BC7' F45B07  	        CALL    P,LEX           ;TOKENISE IF POSS.
+1914: 9965+12	0BCA' 1812    	        JR      LEXAN8
+1915:				;
+1916: 9977+7	0BCC' FE2A    	LEXAN7: CP      '*'
+1917: 9984+7+5	0BCE' 2816    	        JR      Z,LEXAN9
+1918: 9991+4	0BD0' B7      	        OR      A
+1919: 9995+10+7	0BD1' F45B07  	        CALL    P,LEX           ;TOKENISE IF POSS.
+1920:10005+7	0BD4' FE8F    	        CP      TOKLO
+1921:10012+7+5	0BD6' 3806    	        JR      C,LEXAN8
+1922:10019+7	0BD8' FE94    	        CP      TOKHI+1
+1923:10026+7+5	0BDA' 3002    	        JR      NC,LEXAN8
+1924:10033+7	0BDC' C640    	        ADD     A,OFFSET        ;LEFT VERSION
+1925:10040+7	0BDE' FEF4    	LEXAN8: CP      REM
+1926:10047+7+5	0BE0' 2804    	        JR      Z,LEXAN9
+1927:10054+7	0BE2' FEDC    	        CP      DATA
+1928:10061+7+5	0BE4' 2002    	        JR      NZ,LEXANA
+1929:10068+8	0BE6' CBF1    	LEXAN9: SET     6,C             ;QUIT TOKENISING
+1930:10076+7	0BE8' FEA4    	LEXANA: CP      FN
+1931:10083+7+5	0BEA' 2809    	        JR      Z,LEXANB
+1932:10090+7	0BEC' FEF2    	        CP      PROC
+1933:10097+7+5	0BEE' 2805    	        JR      Z,LEXANB
+1934:10104+17	0BF0' CD680B  	        CALL    RANGE2
+1935:10121+7+5	0BF3' 3802    	        JR      C,LEXANC
+1936:10128+8	0BF5' CBE9    	LEXANB: SET     5,C             ;IN VARIABLE/FN/PROC
+1937:10136+7	0BF7' FE26    	LEXANC: CP      '&'
+1938:10143+7+5	0BF9' 2002    	        JR      NZ,LEXAND
+1939:10150+8	0BFB' CBD9    	        SET     3,C             ;IN HEX
+1940:10158+10	0BFD' 211C0C  	LEXAND: LD      HL,LIST1
+1941:10168+11	0C00' C5      	        PUSH    BC
+1942:10179+10	0C01' 010600  	        LD      BC,LIST1L
+1943:10189+16+5	0C04' EDB1    	        CPIR
+1944:10205+10	0C06' C1      	        POP     BC
+1945:10215+7+5	0C07' 2002    	        JR      NZ,LEXANE
+1946:10222+8	0C09' CBE1    	        SET     4,C             ;ACCEPT LINE NUMBER
+1947:10230+10	0C0B' 21200C  	LEXANE: LD      HL,LIST2
+1948:10240+11	0C0E' C5      	        PUSH    BC
+1949:10251+10	0C0F' 010500  	        LD      BC,LIST2L
+1950:10261+16+5	0C12' EDB1    	        CPIR
+1951:10277+10	0C14' C1      	        POP     BC
+1952:10287+7+5	0C15' 2002    	        JR      NZ,LEXANF
+1953:10294+8	0C17' CBC1    	        SET     0,C             ;ENTER LEFT MODE
+1954:10302+10	0C19' C37D0B  	LEXANF: JP      LEXAN1
+1955:				;
+1956:     -	0C1C' E5      	LIST1:  DEFB    GOTO
+1957:     -	0C1D' E4      	        DEFB    GOSUB
+1958:     -	0C1E' F7      	        DEFB    RESTOR
+1959:     -	0C1F' FC      	        DEFB    TRACE
+1960:     -	0C20' 8C      	LIST2:  DEFB    THEN
+1961:     -	0C21' 8B      	        DEFB    ELSE
+1962:     -	0006'         	LIST1L  EQU     $-LIST1
+1963:     -	0C22' F5      	        DEFB    REPEAT
+1964:     -	0C23' 85      	        DEFB    TERROR
+1965:     -	0C24' 3A      	        DEFB    ':'
+1966:     -	0005'         	LIST2L  EQU     $-LIST2
+1967:				;
+1968:				;ENCODE - ENCODE LINE NUMBER INTO PSEUDO-BINARY FORM.
+1969:				;   Inputs: HL=line number, DE=string pointer
+1970:				;  Outputs: DE updated, BIT 4,C set.
+1971:				; Destroys: A,B,C,D,E,H,L,F
+1972:				;
+1973:10312+8	0C25' CBE1    	ENCODE: SET     4,C
+1974:10320+4	0C27' EB      	        EX      DE,HL
+1975:10324+10	0C28' 368D    	        LD      (HL),LINO
+1976:10334+6	0C2A' 23      	        INC     HL
+1977:10340+4	0C2B' 7A      	        LD      A,D
+1978:10344+7	0C2C' E6C0    	        AND     0C0H
+1979:10351+4	0C2E' 0F      	        RRCA
+1980:10355+4	0C2F' 0F      	        RRCA
+1981:10359+4	0C30' 47      	        LD      B,A
+1982:10363+4	0C31' 7B      	        LD      A,E
+1983:10367+7	0C32' E6C0    	        AND     0C0H
+1984:10374+4	0C34' B0      	        OR      B
+1985:10378+4	0C35' 0F      	        RRCA
+1986:10382+4	0C36' 0F      	        RRCA
+1987:10386+7	0C37' EE54    	        XOR     01010100B
+1988:10393+7	0C39' 77      	        LD      (HL),A
+1989:10400+6	0C3A' 23      	        INC     HL
+1990:10406+4	0C3B' 7B      	        LD      A,E
+1991:10410+7	0C3C' E63F    	        AND     3FH
+1992:10417+7	0C3E' F640    	        OR      '@'
+1993:10424+7	0C40' 77      	        LD      (HL),A
+1994:10431+6	0C41' 23      	        INC     HL
+1995:10437+4	0C42' 7A      	        LD      A,D
+1996:10441+7	0C43' E63F    	        AND     3FH
+1997:10448+7	0C45' F640    	        OR      '@'
+1998:10455+7	0C47' 77      	        LD      (HL),A
+1999:10462+6	0C48' 23      	        INC     HL
+2000:10468+4	0C49' EB      	        EX      DE,HL
+2001:10472+10	0C4A' C9      	        RET
+2002:				;
+2003:				;TEXT - OUTPUT MESSAGE.
+2004:				;   Inputs: HL addresses text (terminated by nul)
+2005:				;  Outputs: HL addresses character following nul.
+2006:				; Destroys: A,H,L,F
+2007:				;
+2008:10482+16	0C4B' 2A0000  	REPORT: LD      HL,(ERRTXT)
+2009:10498+7	0C4E' 7E      	TEXT:   LD      A,(HL)
+2010:10505+6	0C4F' 23      	        INC     HL
+2011:10511+4	0C50' B7      	        OR      A
+2012:10515+5+6	0C51' C8      	        RET     Z
+2013:10520+17	0C52' CDB908  	        CALL    OUT
+2014:10537+12	0C55' 18F7    	        JR      TEXT
+2015:				;
+2016:				;TELL - OUTPUT MESSAGE.
+2017:				;   Inputs: Text follows subroutine call (term=nul)
+2018:				; Destroys: A,F
+2019:				;
+2020:10549+19	0C57' E3      	TELL:   EX      (SP),HL         ;GET RETURN ADDRESS
+2021:10568+17	0C58' CD4E0C  	        CALL    TEXT
+2022:10585+19	0C5B' E3      	        EX      (SP),HL
+2023:10604+10	0C5C' C9      	        RET
+2024:				;
+2025:     -	000D'         	CR      EQU     0DH
+2026:     -	000A'         	LF      EQU     0AH
+2027:     -	001B'         	ESC     EQU     1BH
+2028:				;
+2029:     -	0000'         	        END     START
+
+
+
+Statistics:
+
+     4	passes
+     0	jr promotions
+   238	symbols
+  3165	bytes
+
+
+
+Symbol Table:
+
+ACCS            00        0 (extern)
+ARRAY            966'     2406
+ATEND            141'     321
+AUTO             6A3'     1699 (public)
+AUTONO          00        0 (extern)
+BAD              6AF'     1711
+BRAKET          00        0 (extern)
+BUFFER          00        0 (extern)
+CARRET           8AC'     2220
+CHAIN0          00        0 (extern)
+CHECK           00        0 (extern)
+CLEAN            7C9'     1993
+CLEAR            7F8'     2040 (public)
+CLEAR1           808'     2056
+CLOOP           9B'       155 (public)
+CLOOP0           6D8'     1752
+CLOOP1           569'     1385
+COLD            2A'       42
+COMMA           00        0 (extern)
+COUNT           00        0 (extern)
+CR             =0D        13
+CREATE           AA9'     2729 (public)
+CRLF             899'     2201 (public)
+DATA           =DC        220
+DECODE          00        0 (extern)
+DEL              794'     1940
+DELET1           543'     1347
+DELETE           53D'     1341 (public)
+DIM            =DE        222
+DLP1             B4C'     2892
+DLPAIR           B3A'     2874
+DYNVAR          00        0 (extern)
+ELSE           =8B        139
+ENCODE           C25'     3109
+ERL             00        0 (extern)
+ERR             00        0 (extern)
+ERRLIN          00        0 (extern)
+ERROR            707'     1799 (public)
+ERROR0           714'     1812
+ERROR1           71B'     1819
+ERROR2           73B'     1851
+ERROR3           968'     2408
+ERRTRP          00        0 (extern)
+ERRTXT          00        0 (extern)
+ERRWDS           43A'     1082
+ESC            =1B        27
+ESCAPE          00        0 (extern)
+EXPRI           00        0 (extern)
+EXPRS           00        0 (extern)
+EXTERR           71C'     1820 (public)
+FILL            00        0 (extern)
+FINDL            8D7'     2263 (public)
+FINDL1           8E1'     2273
+FN             =A4        164
+FNPTR           00        0 (extern)
+FOR            =E3        227
+FREE            00        0 (extern)
+GETDEF           A07'     2567 (public)
+GETV0            9F8'     2552
+GETV2            993'     2451
+GETV3            997'     2455
+GETV4            9D4'     2516
+GETV5            9D8'     2520
+GETV6            9DC'     2524
+GETV7            9DD'     2525
+GETV8            9E3'     2531
+GETV9            9E7'     2535
+GETVA            9E9'     2537
+GETVAR           96B'     2411 (public)
+GETVX            9C6'     2502
+GETVZ            9CE'     2510
+GOSUB          =E4        228
+GOTO           =E5        229
+HIMEM           00        0 (extern)
+INCREM          00        0 (extern)
+IND1             889'     2185
+IND2             88A'     2186
+IND3             896'     2198
+IND4             897'     2199
+INDENT           87C'     2172
+ITEMI           00        0 (extern)
+KEYWDL         = 2DF      735
+KEYWDS           159'     345
+LEX              75B'     1883
+LEX0             75E'     1886
+LEX1             767'     1895
+LEX2             76E'     1902
+LEX3             770'     1904
+LEX4             786'     1926
+LEX5             78A'     1930
+LEX6             790'     1936
+LEXAN1           B7D'     2941
+LEXAN2           B81'     2945 (public)
+LEXAN3           B95'     2965
+LEXAN4           BA3'     2979
+LEXAN5           BAC'     2988
+LEXAN6           BC0'     3008
+LEXAN7           BCC'     3020
+LEXAN8           BDE'     3038
+LEXAN9           BE6'     3046
+LEXANA           BE8'     3048
+LEXANB           BF5'     3061
+LEXANC           BF7'     3063
+LEXAND           BFD'     3069
+LEXANE           C0B'     3083
+LEXANF           C19'     3097
+LF             =0A        10
+LINE           =86        134
+LINENO          00        0 (extern)
+LINNM1           AF3'     2803
+LINNUM           AED'     2797
+LINO           =8D        141
+LIST             56C'     1388 (public)
+LIST1            C1C'     3100
+LIST1L         =06        6
+LIST2            C20'     3104
+LIST2L         =05        5
+LIST7            858'     2136
+LIST8            84D'     2125
+LISTA            597'     1431
+LISTB            591'     1425
+LISTC            5A2'     1442
+LISTIT           810'     2064
+LISTO            55F'     1375
+LISTON          00        0 (extern)
+LNZERO          F0'       240
+LOAD             6DB'     1755 (public)
+LOAD0            7AF'     1967 (public)
+LOADN           00        0 (extern)
+LOC0             A47'     2631
+LOC1             A53'     2643
+LOC2             A5B'     2651
+LOC3             A68'     2664
+LOC4             A74'     2676
+LOC5             A7A'     2682
+LOC5A            A96'     2710
+LOC6             AA7'     2727
+LOC7             AB6'     2742
+LOC8             AD1'     2769
+LOC9             ADE'     2782
+LOCAL          =EA        234
+LOCATE           A21'     2593
+LOMEM           00        0 (extern)
+LOUT             870'     2160
+LTRAP           00        0 (extern)
+MUL16           00        0 (extern)
+NEW              6BD'     1725 (public)
+NEWIT            7F0'     2032
+NEXT           =ED        237
+NOAUTO          D5'       213
+NOTICE          79'       121
+NXT             00        0 (extern)
+OFFSET         =40        64
+OLD              6C2'     1730 (public)
+ON             =EE        238
+OSBGET          00        0 (extern)
+OSBPUT          00        0 (extern)
+OSCLI           00        0 (extern)
+OSINIT          00        0 (extern)
+OSLINE          00        0 (extern)
+OSLOAD          00        0 (extern)
+OSSAVE          00        0 (extern)
+OSSHUT          00        0 (extern)
+OSSTAT          00        0 (extern)
+OSWRCH          00        0 (extern)
+OUT              8B9'     2233 (public)
+OUTCHR           8A0'     2208 (public)
+PAGE            00        0 (extern)
+PAIR             B17'     2839
+PAIR1            B20'     2848
+PBCD             931'     2353
+PBCD0            933'     2355
+PBCD1            938'     2360
+PBCD2            939'     2361
+PBCD3            946'     2374
+PBCD4            955'     2389
+PBCDL            92D'     2349 (public)
+PRLINO           85D'     2141
+PROC           =F2        242
+PROMPT          00        0 (extern)
+PROPTR          00        0 (extern)
+PURGE           35'       53
+PUTVAR           95C'     2396 (public)
+RANGE            B52'     2898 (public)
+RANGE1           B5E'     2910
+RANGE2           B68'     2920
+REM            =F4        244
+REN            =CC        204
+RENUM            5EA'     1514 (public)
+RENUM1           5F8'     1528
+RENUM2           62C'     1580
+RENUM3           63A'     1594
+RENUM4           66E'     1646
+RENUM5           699'     1689
+RENUM6           69F'     1695
+RENUM7           659'     1625
+REPEAT         =F5        245
+REPORT           C4B'     3147 (public)
+RESET           00        0 (extern)
+RESTOR         =F7        247
+RUN0            00        0 (extern)
+SAVE             6E9'     1769 (public)
+SAYLN            91A'     2330 (public)
+SEARCH          00        0 (extern)
+SET1             8FF'     2303
+SET2             911'     2321
+SET3             915'     2325
+SETLIN           8F0'     2288 (public)
+SETOP1           7DB'     2011
+SETOP2           7E9'     2025
+SETTOP           7D4'     2004
+SFIX            00        0 (extern)
+SPACE            B76'     2934
+START           00'       0 (public)
+STAVAR          00        0 (extern)
+TELL             C57'     3159 (public)
+TERM?           00        0 (extern)
+TERROR         =85        133
+TEXT             C4E'     3150
+THEN           =8C        140
+TIF            =E7        231
+TO             =B8        184
+TOKEN1           8C8'     2248
+TOKHI          =93        147
+TOKLO          =8F        143
+TOOBIG           B12'     2834
+TOP             00        0 (extern)
+TRACE          =FC        252
+TRACEN          00        0 (extern)
+TYPE             A97'     2711
+UNTIL          =FD        253
+WARM            9A'       154 (public)
+WARM0            704'     1796
+WARMNC           5B8'     1464
+WIDTH           00        0 (extern)
+X4OR5           00        0 (extern)
+XEQ             00        0 (extern)
+ZERO            00        0 (extern)

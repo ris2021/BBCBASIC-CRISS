@@ -1,0 +1,299 @@
+   1:				        TITLE   BBC BASIC (C) R.T.RUSSELL 1984
+   2:				;
+   3:				;BBC BASIC (Z80) - CP/M VERSION.
+   4:				;(C) COPYRIGHT R.T.RUSSELL, 1984.
+   5:				;ALL RIGHTS RESERVED.
+   6:				;
+   7:				;THIS PROGRAM ALLOWS THE USER TO ADAPT BBC BASIC TO THE
+   8:				;PARTICULAR CHARACTERISTICS OF HIS SYSTEM HARDWARE ETC.
+   9:				;
+  10:				;THE PROGRAM RESIDES AT 100H FOR EASE OF LOADING.
+  11:				;*** IT MUST NOT EXCEED 256 BYTES IN TOTAL LENGTH ***
+  12:				;
+  13:				;PLEASE NOTE THAT A Z80 PROCESSOR AND CP/M VERSION 2.2
+  14:				;OR LATER ARE REQUIRED.
+  15:				;
+  16:				;R.T.RUSSELL, 04-02-1984
+  17:				;
+  18:     -	0005'         	BDOS    EQU     5
+  19:     -	0200'         	COLD    EQU     200H
+  20:				;
+  21:				        GLOBAL  CLRSCN
+  22:				        GLOBAL  PUTCSR
+  23:				        GLOBAL  GETCSR
+  24:				        GLOBAL  PUTIME
+  25:				        GLOBAL  GETIME
+  26:				        GLOBAL  GETKEY
+  27:				        GLOBAL  BYE
+  28:				;
+  29:				        ASEG
+  30:     -	0100          	        ORG     100H
+  31:				;
+  32:				;JUMP TABLE - BASIC makes calls to hardware-dependent
+  33:				;features via this table:
+  34:				;
+  35:     -	0100  C31801  	        JP      INIT
+  36:     -	0103  C33201  	CLRSCN: JP      CLS             ;CLEAR SCREEN
+  37:     -	0106  C36001  	PUTCSR: JP      PCSR            ;SET CURSOR POSN.
+  38:     -	0109  C36101  	GETCSR: JP      GCSR            ;READ CURSOR POSN.
+  39:     -	010C  C32801  	PUTIME: JP      PTIME           ;SET ELAPSED TIME
+  40:     -	010F  C31E01  	GETIME: JP      GTIME           ;READ ELAPSED TIME
+  41:     -	0112  C34301  	GETKEY: JP      INKEY           ;READ KEY (TIME LIMIT)
+  42:     -	0115  C31B01  	BYE:    JP      REBOOT          ;RETURN TO CP/M
+  43:				;
+  44:				;THE CODE WHICH FOLLOWS IS SUITABLE FOR THE CRF/RTR
+  45:				;BOARD. IT SHOULD BE MODIFIED TO SUIT YOUR SYSTEM.
+  46:				;
+  47:				; dtrg: I've disabled all of this due to problems with the NC200 and
+  48:				; emulator.
+  49:				
+  50:				;
+  51:				;VECTOR TABLE FOR Z80-CTC:
+  52:				;
+  53:     -	0118          	        ORG     $+7 AND 0FFF8H
+  54:				;
+  55:				;VECTOR: DEFW    TIMER
+  56:				;        DEFW    TIMER
+  57:				;        DEFW    TIMER
+  58:				;        DEFW    TIMER
+  59:				;
+  60:				;INIT - Perform hardware initialisation.
+  61:				;
+  62:     -	0118          	INIT:   ;CALL    INTIME          ;INITIALISE TIMER
+  63:     -	0118  C30002  	        JP      COLD
+  64:				;
+  65:				;REBOOT - Stop interrupts and return to CP/M. 
+  66:				;
+  67:     -	011B  3E03    	REBOOT: LD      A,3
+  68:				;        OUT     (CTC0+3),A
+  69:     -	011D  C7      	        RST     0
+  70:				
+  71:				;
+  72:				;INTIME - Initialise CTC to interrupt every 10 ms.
+  73:				;Also set time to zero.
+  74:				;
+  75:				;INTIME: DI
+  76:				;        IM      2
+  77:				;        LD      A,VECTOR/256
+  78:				;        LD      I,A
+  79:				;        LD      A,VECTOR AND 0FFH
+  80:				;        OUT     (CTC0),A
+  81:				;        LD      A,10100111B
+  82:				;        OUT     (CTC0+3),A
+  83:				;        LD      A,96
+  84:				;        OUT     (CTC0+3),A
+  85:				;        LD      HL,0
+  86:				;        LD      (TIME),HL
+  87:				;        LD      (TIME+2),HL
+  88:				;        EI
+  89:				;        RETI
+  90:				;;
+  91:				;;TIMER - Interrupt service routine.
+  92:				;;Increments elapsed-time clock 100 times per second.
+  93:				;;
+  94:				;TIMER:  PUSH    AF
+  95:				;        PUSH    BC
+  96:				;        PUSH    HL
+  97:				;        LD      HL,TIME
+  98:				;        LD      B,4
+  99:				;UPT1:   INC     (HL)
+ 100:				;        JR      NZ,EXIT
+ 101:				;        INC     HL
+ 102:				;        DJNZ    UPT1
+ 103:				;EXIT:   POP     HL
+ 104:				;        POP     BC
+ 105:				;        POP     AF
+ 106:				;        EI
+ 107:				;        RETI
+ 108:				;
+ 109:				;GTIME - Read elapsed-time clock.
+ 110:				;  Outputs: DEHL = elapsed time (centiseconds)
+ 111:				; Destroys: A,D,E,H,L,F
+ 112:				;
+ 113:     -	011E  F3      	GTIME:  DI
+ 114:     -	011F  2A6801  	        LD      HL,(TIME)
+ 115:     -	0122  ED5B6A01	        LD      DE,(TIME+2)
+ 116:     -	0126  FB      	        EI
+ 117:     -	0127  C9      	        RET
+ 118:				;
+ 119:				;PTIME - Load elapsed-time clock.
+ 120:				;   Inputs: DEHL = time to load (centiseconds)
+ 121:				; Destroys: A,D,E,H,L,F
+ 122:				;
+ 123:     -	0128  F3      	PTIME:  DI
+ 124:     -	0129  226801  	        LD      (TIME),HL
+ 125:     -	012C  ED536A01	        LD      (TIME+2),DE
+ 126:     -	0130  FB      	        EI
+ 127:     -	0131  C9      	        RET
+ 128:				;
+ 129:				;CLS - Clear screen.
+ 130:				; Destroys: A,D,E,H,L,F
+ 131:				;
+ 132:     -	0132  C5      	CLS:    PUSH    BC
+ 133:     -	0133  0E02    	        LD      C,2
+ 134:     -	0135  1E0C    	        LD      E,12
+ 135:     -	0137  CD0500  	        CALL    BDOS
+ 136:     -	013A  0E02    	        LD      C,2
+ 137:     -	013C  1E18    	        LD      E,24
+ 138:     -	013E  CD0500  	        CALL    BDOS
+ 139:     -	0141  C1      	        POP     BC
+ 140:     -	0142  C9      	        RET
+ 141:				;
+ 142:				;INKEY - Sample keyboard with specified wait.
+ 143:				;   Inputs: HL = Time to wait (centiseconds)
+ 144:				;  Outputs: Carry reset indicates time-out.
+ 145:				;           If carry set, A = character typed.
+ 146:				; Destroys: A,D,E,H,L,F
+ 147:				;
+ 148:     -	0143  C5      	INKEY:  PUSH    BC
+ 149:     -	0144  E5      	        PUSH    HL
+ 150:     -	0145  0E06    	        LD      C,6
+ 151:     -	0147  1EFF    	        LD      E,0FFH
+ 152:     -	0149  CD0500  	        CALL    BDOS            ;CONSOLE INPUT
+ 153:     -	014C  E1      	        POP     HL
+ 154:     -	014D  C1      	        POP     BC
+ 155:     -	014E  B7      	        OR      A
+ 156:     -	014F  37      	        SCF
+ 157:     -	0150  C0      	        RET     NZ              ;KEY PRESSED
+ 158:     -	0151  B4      	        OR      H
+ 159:     -	0152  B5      	        OR      L
+ 160:     -	0153  C8      	        RET     Z               ;TIME-OUT
+ 161:     -	0154  E5      	        PUSH    HL
+ 162:     -	0155  216801  	        LD      HL,TIME
+ 163:     -	0158  7E      	        LD      A,(HL)
+ 164:     -	0159  BE      	WAIT1:  CP      (HL)
+ 165:     -	015A  28FD    	        JR      Z,WAIT1         ;WAIT FOR 10 ms.
+ 166:     -	015C  E1      	        POP     HL
+ 167:     -	015D  2B      	        DEC     HL
+ 168:     -	015E  18E3    	        JR      INKEY
+ 169:				;
+ 170:				;PCSR - Move cursor to specified position.
+ 171:				;   Inputs: DE = horizontal position (LHS=0)
+ 172:				;           HL = vertical position (TOP=0)
+ 173:				; Destroys: A,D,E,H,L,F
+ 174:				;
+ 175:				;
+ 176:     -	0160  C9      	PCSR:   RET
+ 177:				;		LD      A,E
+ 178:				;        ADD     HL,HL
+ 179:				;        ADD     HL,HL
+ 180:				;        ADD     HL,HL
+ 181:				;        ADD     HL,HL           ;*16
+ 182:				;        LD      D,H
+ 183:				;        LD      E,L
+ 184:				;        ADD     HL,HL
+ 185:				;        ADD     HL,HL
+ 186:				;        ADD     HL,DE           ;*80
+ 187:				;        LD      D,0
+ 188:				;        LD      E,A
+ 189:				;        ADD     HL,DE           ;OFFSET FROM HOME
+ 190:				;        LD      DE,(HOME)
+ 191:				;        ADD     HL,DE
+ 192:				;        LD      A,14
+ 193:				;        OUT     (CRTCS),A
+ 194:				;        LD      A,H
+ 195:				;        AND     0FH
+ 196:				;        OUT     (CRTCD),A
+ 197:				;        LD      A,15
+ 198:				;        OUT     (CRTCS),A
+ 199:				;        LD      A,L
+ 200:				;        OUT     (CRTCD),A
+ 201:				;        RET
+ 202:				;
+ 203:				;GCSR - Return cursor coordinates.
+ 204:				;   Outputs:  DE = X coordinate (POS)
+ 205:				;             HL = Y coordinate (VPOS)
+ 206:				;  Destroys: A,D,E,H,L,F
+ 207:				;
+ 208:     -	0161  110000  	GCSR:	ld		de, 0
+ 209:     -	0164  210000  			ld 		hl, 0
+ 210:     -	0167  C9      			ret
+ 211:				;		LD      A,14
+ 212:				;        OUT     (CRTCS),A
+ 213:				;        IN      A,(CRTCD)
+ 214:				;        LD      H,A
+ 215:				;        LD      A,15
+ 216:				;        OUT     (CRTCS),A
+ 217:				;        IN      A,(CRTCD)
+ 218:				;        LD      L,A
+ 219:				;        LD      DE,(HOME)
+ 220:				;        SBC     HL,DE
+ 221:				;        LD      A,H
+ 222:				;        AND     7
+ 223:				;        LD      H,A
+ 224:				;        LD      DE,-80
+ 225:				;        LD      A,D
+ 226:				;ROWS:   ADD     HL,DE
+ 227:				;        INC     A
+ 228:				;        JR      C,ROWS
+ 229:				;        SBC     HL,DE
+ 230:				;        LD      D,0
+ 231:				;        LD      E,A
+ 232:				;        EX      DE,HL
+ 233:				;        RET
+ 234:				;
+ 235:     -	0168          	TIME:   DEFS    4
+ 236:				;
+ 237:     -	FF21          	HOME    EQU     0FF21H
+ 238:				;
+ 239:     -	0080          	CTC0    EQU     80H
+ 240:     -	0084          	CRTCS   EQU     84H
+ 241:     -	0085          	CRTCD   EQU     85H
+ 242:				;
+ 243:     -	0000          	        IF      $ GT 1F4H
+ 245:				        ENDIF
+ 246:				;
+ 247:     -	01F4          	        ORG     1F4H
+ 248:				;
+ 249:     -	01F4  50      	        DEFB    80              ;WIDTH
+ 250:     -	01F5  0B      	        DEFB    'K' AND 1FH     ;CURSOR UP
+ 251:     -	01F6  0A      	        DEFB    'J' AND 1FH     ;CURSOR DOWN
+ 252:     -	01F7  0C      	        DEFB    'L' AND 1FH     ;START OF LINE
+ 253:     -	01F8  02      	        DEFB    'B' AND 1FH     ;END OF LINE
+ 254:     -	01F9  03      	        DEFB    'C' AND 1FH     ;DELETE TO END OF LINE
+ 255:     -	01FA  7F      	        DEFB    7FH             ;BACKSPACE & DELETE
+ 256:     -	01FB  18      	        DEFB    'X' AND 1FH     ;CANCEL LINE
+ 257:     -	01FC  08      	        DEFB    'H' AND 1FH     ;CURSOR LEFT
+ 258:     -	01FD  09      	        DEFB    'I' AND 1FH     ;CURSOR RIGHT
+ 259:     -	01FE  05      	        DEFB    'E' AND 1FH     ;DELETE CHARACTER
+ 260:     -	01FF  01      	        DEFB    'A' AND 1FH     ;INSERT CHARACTER
+ 261:				;
+ 262:     -	0200          	FIN:    END
+
+
+
+Statistics:
+
+     4	passes
+     0	jr promotions
+    24	symbols
+   116	bytes
+
+
+
+Symbol Table:
+
+BDOS           =05        5
+BYE              115      277 (public)
+CLRSCN           103      259 (public)
+CLS              132      306
+COLD           = 200      512
+CRTCD          =85        133
+CRTCS          =84        132
+CTC0           =80        128
+FIN              200      512
+GCSR             161      353
+GETCSR           109      265 (public)
+GETIME           10F      271 (public)
+GETKEY           112      274 (public)
+GTIME            11E      286
+HOME           =FF21      65313
+INIT             118      280
+INKEY            143      323
+PCSR             160      352
+PTIME            128      296
+PUTCSR           106      262 (public)
+PUTIME           10C      268 (public)
+REBOOT           11B      283
+TIME             168      360
+WAIT1            159      345

@@ -1,0 +1,65 @@
+   1:				;
+   2:				        GLOBAL  CLG
+   3:				        GLOBAL  COLOUR
+   4:				        GLOBAL  DRAW
+   5:				        GLOBAL  ENVEL
+   6:				        GLOBAL  GCOL
+   7:				        GLOBAL  MODE
+   8:				        GLOBAL  MOVE
+   9:				        GLOBAL  PLOT
+  10:				        GLOBAL  SOUND
+  11:				        GLOBAL  ADVAL
+  12:				        GLOBAL  POINT
+  13:				        GLOBAL  GETIMS
+  14:				        GLOBAL  PUTIMS
+  15:				;
+  16:				        EXTRN   EXTERR
+  17:				;
+  18:     -	0000'         	CLG:
+  19:     -	0000'         	COLOUR:
+  20:     -	0000'         	DRAW:
+  21:     -	0000'         	ENVEL:
+  22:     -	0000'         	GCOL:
+  23:     -	0000'         	MODE:
+  24:     -	0000'         	MOVE:
+  25:     -	0000'         	PLOT:
+  26:     -	0000'         	SOUND:
+  27:     -	0000'         	ADVAL:
+  28:     -	0000'         	POINT:
+  29:     -	0000'         	GETIMS:
+  30:     -	0000'         	PUTIMS:
+  31:    0+4	0000' AF      	        XOR     A
+  32:    4+17	0001' CD0000  	        CALL    EXTERR
+  33:     -	0004' 536F7272	        DEFM    'Sorry'
+	              79
+  34:     -	0009' 00      	        DEFB    0
+  35:				;
+  36:     -	000A'         	        END
+
+
+
+Statistics:
+
+     3	passes
+     0	jr promotions
+    14	symbols
+    10	bytes
+
+
+
+Symbol Table:
+
+ADVAL           00'       0 (public)
+CLG             00'       0 (public)
+COLOUR          00'       0 (public)
+DRAW            00'       0 (public)
+ENVEL           00'       0 (public)
+EXTERR          00        0 (extern)
+GCOL            00'       0 (public)
+GETIMS          00'       0 (public)
+MODE            00'       0 (public)
+MOVE            00'       0 (public)
+PLOT            00'       0 (public)
+POINT           00'       0 (public)
+PUTIMS          00'       0 (public)
+SOUND           00'       0 (public)

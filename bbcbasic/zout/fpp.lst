@@ -1,0 +1,2486 @@
+   1:				        TITLE   '(C) COPYRIGHT R.T.RUSSELL 1986'
+   2:				;
+   3:				;Z80 FLOATING POINT PACKAGE
+   4:				;(C) COPYRIGHT  R.T.RUSSELL  1986
+   5:				;VERSION 0.0, 26-10-1986
+   6:				;VERSION 0.1, 14-12-1988 (BUG FIX)
+   7:				;
+   8:				;BINARY FLOATING POINT REPRESENTATION:
+   9:				;   32 BIT SIGN-MAGNITUDE NORMALIZED MANTISSA
+  10:				;    8 BIT EXCESS-128 SIGNED EXPONENT
+  11:				;   SIGN BIT REPLACES MANTISSA MSB (IMPLIED "1")
+  12:				;   MANTISSA=0 & EXPONENT=0 IMPLIES VALUE IS ZERO.
+  13:				;
+  14:				;BINARY INTEGER REPRESENTATION:
+  15:				;   32 BIT 2'S-COMPLEMENT SIGNED INTEGER
+  16:				;    "EXPONENT" BYTE = 0 (WHEN PRESENT)
+  17:				;
+  18:				;NORMAL REGISTER ALLOCATION: MANTISSA - HLH'L'
+  19:				;                            EXPONENT - C
+  20:				;ALTERNATE REGISTER ALLOCATION: MANTISSA - DED'E'
+  21:				;                               EXPONENT - B
+  22:				;
+  23:				;Error codes:
+  24:				;
+  25:     -	0001'         	BADOP   EQU     1               ;Bad operation code
+  26:     -	0012'         	DIVBY0  EQU     18              ;Division by zero
+  27:     -	0014'         	TOOBIG  EQU     20              ;Too big
+  28:     -	0015'         	NGROOT  EQU     21              ;Negative root
+  29:     -	0016'         	LOGRNG  EQU     22              ;Log range
+  30:     -	0017'         	ACLOST  EQU     23              ;Accuracy lost
+  31:     -	0018'         	EXPRNG  EQU     24              ;Exp range
+  32:				;
+  33:				        GLOBAL  FPP
+  34:				;
+  35:				;Call entry and despatch code:
+  36:				;
+  37:    0+15	0000' FDE5    	FPP:    PUSH    IY              ;Save IY
+  38:   15+14	0002' FD210000	        LD      IY,0
+  39:   29+15	0006' FD39    	        ADD     IY,SP           ;Save SP in IY
+  40:   44+17	0008' CD1700  	        CALL    OP              ;Perform operation
+  41:   61+4	000B' BF      	        CP      A               ;Good return (Z, NC)
+  42:   65+14	000C' FDE1    	EXIT:   POP     IY              ;Restore IY
+  43:   79+10	000E' C9      	        ret                     ;Return to caller
+  44:				;
+  45:				;Error exit:
+  46:				;
+  47:   89+7	000F' 3E01    	BAD:    LD      A,BADOP         ;"Bad operation code"
+  48:   96+10	0011' FDF9    	ERROR:  LD      SP,IY           ;Restore SP from IY
+  49:  106+4	0013' B7      	        OR      A               ;Set NZ
+  50:  110+4	0014' 37      	        SCF                     ;Set C
+  51:  114+12	0015' 18F5    	        JR      EXIT
+  52:				;
+  53:				;Perform operation or function:
+  54:				;
+  55:  126+7	0017' FE2A    	OP:     CP      (RTABLE-DTABLE)/2
+  56:  133+7+5	0019' 30F4    	        JR      NC,BAD
+  57:  140+7	001B' FE10    	        CP      (FTABLE-DTABLE)/2
+  58:  147+7+5	001D' 3007    	        JR      NC,DISPAT
+  59:  154+4	001F' 08      	        EX      AF,AF'
+  60:  158+4	0020' 78      	        LD      A,B
+  61:  162+4	0021' B1      	        OR      C               ;Both integer?
+  62:  166+10+7	0022' C4A109  	        CALL    NZ,FLOATA       ;No, so float both
+  63:  176+4	0025' 08      	        EX      AF,AF'
+  64:  180+11	0026' E5      	DISPAT: PUSH    HL
+  65:  191+10	0027' 213700  	        LD      HL,DTABLE
+  66:  201+11	002A' C5      	        PUSH    BC
+  67:  212+4	002B' 87      	        ADD     A,A             ;A = op-code * 2
+  68:  216+4	002C' 4F      	        LD      C,A
+  69:  220+7	002D' 0600    	        LD      B,0             ;BC = op-code * 2
+  70:  227+11	002F' 09      	        ADD     HL,BC
+  71:  238+7	0030' 7E      	        LD      A,(HL)          ;Get low byte
+  72:  245+6	0031' 23      	        INC     HL
+  73:  251+7	0032' 66      	        LD      H,(HL)          ;Get high byte
+  74:  258+4	0033' 6F      	        LD      L,A
+  75:  262+10	0034' C1      	        POP     BC
+  76:  272+19	0035' E3      	        EX      (SP),HL
+  77:  291+10	0036' C9      	        RET                     ;Off to routine
+  78:				;
+  79:				;Despatch table:
+  80:				;
+  81:     -	0037' AE00    	DTABLE: DEFW    IAND            ;AND (INTEGER)
+  82:     -	0039' 1101    	        DEFW    IBDIV           ;DIV
+  83:     -	003B' C000    	        DEFW    IEOR            ;EOR
+  84:     -	003D' E400    	        DEFW    IMOD            ;MOD
+  85:     -	003F' D200    	        DEFW    IOR             ;OR
+  86:     -	0041' 4003    	        DEFW    ILE             ;<=
+  87:     -	0043' 4D03    	        DEFW    INE             ;<>
+  88:     -	0045' 3503    	        DEFW    IGE             ;>=
+  89:     -	0047' 1E03    	        DEFW    ILT             ;<
+  90:     -	0049' 5803    	        DEFW    IEQ             ;=
+  91:     -	004B' DB01    	        DEFW    IMUL            ;*
+  92:     -	004D' 3401    	        DEFW    IADD            ;+
+  93:     -	004F' 2903    	        DEFW    IGT             ;>
+  94:     -	0051' 1E01    	        DEFW    ISUB            ;-
+  95:     -	0053' 7902    	        DEFW    IPOW            ;^
+  96:     -	0055' 9301    	        DEFW    IDIV            ;/
+  97:				;
+  98:     -	0057' 6703    	FTABLE: DEFW    ABS             ;ABS
+  99:     -	0059' C306    	        DEFW    ACS             ;ACS
+ 100:     -	005B' 1F06    	        DEFW    ASN             ;ASN
+ 101:     -	005D' 4406    	        DEFW    ATN             ;ATN
+ 102:     -	005F' 5D04    	        DEFW    COS             ;COS
+ 103:     -	0061' 9103    	        DEFW    DEG             ;DEG
+ 104:     -	0063' 0205    	        DEFW    EXP             ;EXP
+ 105:     -	0065' D703    	        DEFW    INT             ;INT
+ 106:     -	0067' 8D05    	        DEFW    LN              ;LN
+ 107:     -	0069' 0D06    	        DEFW    LOG             ;LOG
+ 108:     -	006B' 7203    	        DEFW    NOTK            ;NOT
+ 109:     -	006D' 9903    	        DEFW    RAD             ;RAD
+ 110:     -	006F' AF03    	        DEFW    SGN             ;SGN
+ 111:     -	0071' 6804    	        DEFW    SIN             ;SIN
+ 112:     -	0073' ED03    	        DEFW    SQR             ;SQR
+ 113:     -	0075' 4004    	        DEFW    TAN             ;TAN
+ 114:				;
+ 115:     -	0077' 1D0A    	        DEFW    ZERO            ;ZERO
+ 116:     -	0079' E104    	        DEFW    FONE            ;FONE
+ 117:     -	007B' 5C03    	        DEFW    TRUE            ;TRUE
+ 118:     -	007D' 8503    	        DEFW    PI              ;PI
+ 119:				;
+ 120:     -	007F' BF03    	        DEFW    VAL             ;VAL
+ 121:     -	0081' CB06    	        DEFW    STR             ;STR$
+ 122:				;
+ 123:     -	0083' F208    	        DEFW    SFIX            ;FIX
+ 124:     -	0085' AE09    	        DEFW    SFLOAT          ;FLOAT
+ 125:				;
+ 126:     -	0087' F309    	        DEFW    FTEST           ;TEST
+ 127:     -	0089' 040A    	        DEFW    FCOMP           ;COMPARE
+ 128:				;
+ 129:     -	008B' AB00    	RTABLE: DEFW    FAND            ;AND (FLOATING-POINT)
+ 130:     -	008D' 0E01    	        DEFW    FBDIV           ;DIV
+ 131:     -	008F' BD00    	        DEFW    FEOR            ;EOR
+ 132:     -	0091' E100    	        DEFW    FMOD            ;MOD
+ 133:     -	0093' CF00    	        DEFW    FOR             ;OR
+ 134:     -	0095' 3B03    	        DEFW    FLE             ;<= 
+ 135:     -	0097' 4803    	        DEFW    FNE             ;<>
+ 136:     -	0099' 3003    	        DEFW    FGE             ;>=
+ 137:     -	009B' 1903    	        DEFW    FLT             ;<
+ 138:     -	009D' 5303    	        DEFW    FEQ             ;=
+ 139:     -	009F' 2902    	        DEFW    FMUL            ;*
+ 140:     -	00A1' 3E01    	        DEFW    FADD            ;+
+ 141:     -	00A3' 2403    	        DEFW    FGT             ;>
+ 142:     -	00A5' 2801    	        DEFW    FSUB            ;-
+ 143:     -	00A7' EF02    	        DEFW    FPOW            ;^
+ 144:     -	00A9' 9601    	        DEFW    FDIV            ;/
+ 145:				;
+ 147:				;
+ 148:				;ARITHMETIC AND LOGICAL OPERATORS:
+ 149:				;All take two arguments, in HLH'L'C & DED'E'B.
+ 150:				;Output in HLH'L'C
+ 151:				;All registers except IX, IY destroyed.
+ 152:				; (N.B. FPOW destroys IX).
+ 153:				;
+ 154:				;FAND - Floating-point AND.
+ 155:				;IAND - Integer AND.
+ 156:				;
+ 157:  301+17	00AB' CDE908  	FAND:   CALL    FIX2
+ 158:  318+4	00AE' 7C      	IAND:   LD      A,H
+ 159:  322+4	00AF' A2      	        AND     D
+ 160:  326+4	00B0' 67      	        LD      H,A
+ 161:  330+4	00B1' 7D      	        LD      A,L
+ 162:  334+4	00B2' A3      	        AND     E
+ 163:  338+4	00B3' 6F      	        LD      L,A
+ 164:  342+4	00B4' D9      	        EXX
+ 165:  346+4	00B5' 7C      	        LD      A,H
+ 166:  350+4	00B6' A2      	        AND     D
+ 167:  354+4	00B7' 67      	        LD      H,A
+ 168:  358+4	00B8' 7D      	        LD      A,L
+ 169:  362+4	00B9' A3      	        AND     E
+ 170:  366+4	00BA' 6F      	        LD      L,A
+ 171:  370+4	00BB' D9      	        EXX
+ 172:  374+10	00BC' C9      	        RET
+ 173:				;
+ 174:				;FEOR - Floating-point exclusive-OR.
+ 175:				;IEOR - Integer exclusive-OR.
+ 176:				;
+ 177:  384+17	00BD' CDE908  	FEOR:   CALL    FIX2
+ 178:  401+4	00C0' 7C      	IEOR:   LD      A,H
+ 179:  405+4	00C1' AA      	        XOR     D
+ 180:  409+4	00C2' 67      	        LD      H,A
+ 181:  413+4	00C3' 7D      	        LD      A,L
+ 182:  417+4	00C4' AB      	        XOR     E
+ 183:  421+4	00C5' 6F      	        LD      L,A
+ 184:  425+4	00C6' D9      	        EXX
+ 185:  429+4	00C7' 7C      	        LD      A,H
+ 186:  433+4	00C8' AA      	        XOR     D
+ 187:  437+4	00C9' 67      	        LD      H,A
+ 188:  441+4	00CA' 7D      	        LD      A,L
+ 189:  445+4	00CB' AB      	        XOR     E
+ 190:  449+4	00CC' 6F      	        LD      L,A
+ 191:  453+4	00CD' D9      	        EXX
+ 192:  457+10	00CE' C9      	        RET
+ 193:				;
+ 194:				;FOR - Floating-point OR.
+ 195:				;IOR - Integer OR.
+ 196:				;
+ 197:  467+17	00CF' CDE908  	FOR:    CALL    FIX2
+ 198:  484+4	00D2' 7C      	IOR:    LD      A,H
+ 199:  488+4	00D3' B2      	        OR      D
+ 200:  492+4	00D4' 67      	        LD      H,A
+ 201:  496+4	00D5' 7D      	        LD      A,L
+ 202:  500+4	00D6' B3      	        OR      E
+ 203:  504+4	00D7' 6F      	        LD      L,A
+ 204:  508+4	00D8' D9      	        EXX
+ 205:  512+4	00D9' 7C      	        LD      A,H
+ 206:  516+4	00DA' B2      	        OR      D
+ 207:  520+4	00DB' 67      	        LD      H,A
+ 208:  524+4	00DC' 7D      	        LD      A,L
+ 209:  528+4	00DD' B3      	        OR      E
+ 210:  532+4	00DE' 6F      	        LD      L,A
+ 211:  536+4	00DF' D9      	        EXX
+ 212:  540+10	00E0' C9      	        RET
+ 213:				;
+ 214:				;FMOD - Floating-point remainder.
+ 215:				;IMOD - Integer remainder.
+ 216:				;
+ 217:  550+17	00E1' CDE908  	FMOD:   CALL    FIX2
+ 218:  567+4	00E4' 7C      	IMOD:   LD      A,H
+ 219:  571+4	00E5' AA      	        XOR     D               ;DIV RESULT SIGN
+ 220:  575+8	00E6' CB7C    	        BIT     7,H
+ 221:  583+4	00E8' 08      	        EX      AF,AF'
+ 222:  587+8	00E9' CB7C    	        BIT     7,H
+ 223:  595+10+7	00EB' C40109  	        CALL    NZ,NEGATE       ;MAKE ARGUMENTS +VE
+ 224:  605+17	00EE' CDD809  	        CALL    SWAP
+ 225:  622+8	00F1' CB7C    	        BIT     7,H
+ 226:  630+10+7	00F3' C40109  	        CALL    NZ,NEGATE
+ 227:  640+4	00F6' 44      	        LD      B,H
+ 228:  644+4	00F7' 4D      	        LD      C,L
+ 229:  648+10	00F8' 210000  	        LD      HL,0
+ 230:  658+4	00FB' D9      	        EXX
+ 231:  662+4	00FC' 44      	        LD      B,H
+ 232:  666+4	00FD' 4D      	        LD      C,L
+ 233:  670+10	00FE' 210000  	        LD      HL,0
+ 234:  680+7	0101' 3EDF    	        LD      A,-33
+ 235:  687+17	0103' CD2D0B  	        CALL    DIVA            ;DIVIDE
+ 236:  704+4	0106' D9      	        EXX
+ 237:  708+7	0107' 0E00    	        LD      C,0             ;INTEGER MARKER
+ 238:  715+4	0109' 08      	        EX      AF,AF'
+ 239:  719+5+6	010A' C8      	        RET     Z
+ 240:  724+10	010B' C30109  	        JP      NEGATE
+ 241:				;
+ 242:				;BDIV - Integer division.
+ 243:				;
+ 244:  734+17	010E' CDE908  	FBDIV:  CALL    FIX2
+ 245:  751+17	0111' CDE400  	IBDIV:  CALL    IMOD
+ 246:  768+4	0114' B7      	        OR      A
+ 247:  772+17	0115' CDD809  	        CALL    SWAP
+ 248:  789+7	0118' 0E00    	        LD      C,0
+ 249:  796+5+6	011A' F0      	        RET     P
+ 250:  801+10	011B' C30109  	        JP      NEGATE
+ 251:				;
+ 252:				;ISUB - Integer subtraction.
+ 253:				;FSUB - Floating point subtraction with rounding.
+ 254:				;
+ 255:  811+17	011E' CD600A  	ISUB:   CALL    SUB
+ 256:  828+5+6	0121' E0      	        RET     PO
+ 257:  833+17	0122' CD5A0A  	        CALL    ADD
+ 258:  850+17	0125' CDA509  	        CALL    FLOAT2
+ 259:  867+4	0128' 7A      	FSUB:   LD      A,D
+ 260:  871+7	0129' EE80    	        XOR     80H             ;CHANGE SIGN THEN ADD
+ 261:  878+4	012B' 57      	        LD      D,A
+ 262:  882+12	012C' 1810    	        JR      FADD
+ 263:				;
+ 264:				;Reverse subtract.
+ 265:				;
+ 266:  894+4	012E' 7C      	RSUB:   LD      A,H
+ 267:  898+7	012F' EE80    	        XOR     80H
+ 268:  905+4	0131' 67      	        LD      H,A
+ 269:  909+12	0132' 180A    	        JR      FADD
+ 270:				;
+ 271:				;IADD - Integer addition.
+ 272:				;FADD - Floating point addition with rounding.
+ 273:				;
+ 274:  921+17	0134' CD5A0A  	IADD:   CALL    ADD
+ 275:  938+5+6	0137' E0      	        RET     PO
+ 276:  943+17	0138' CD600A  	        CALL    SUB
+ 277:  960+17	013B' CDA509  	        CALL    FLOAT2
+ 278:  977+4	013E' 05      	FADD:   DEC     B
+ 279:  981+4	013F' 04      	        INC     B
+ 280:  985+5+6	0140' C8      	        RET     Z               ;ARG 2 ZERO
+ 281:  990+4	0141' 0D      	        DEC     C
+ 282:  994+4	0142' 0C      	        INC     C
+ 283:  998+10	0143' CAD809  	        JP      Z,SWAP          ;ARG 1 ZERO
+ 284: 1008+4	0146' D9      	        EXX
+ 285: 1012+10	0147' 010000  	        LD      BC,0            ;INITIALISE
+ 286: 1022+4	014A' D9      	        EXX
+ 287: 1026+4	014B' 7C      	        LD      A,H
+ 288: 1030+4	014C' AA      	        XOR     D               ;XOR SIGNS
+ 289: 1034+11	014D' F5      	        PUSH    AF
+ 290: 1045+4	014E' 78      	        LD      A,B
+ 291: 1049+4	014F' B9      	        CP      C               ;COMPARE EXPONENTS
+ 292: 1053+10+7	0150' DCD809  	        CALL    C,SWAP          ;MAKE DED'E'B LARGEST
+ 293: 1063+4	0153' 78      	        LD      A,B
+ 294: 1067+8	0154' CBFC    	        SET     7,H             ;IMPLIED 1
+ 295: 1075+10+7	0156' C4D908  	        CALL    NZ,FIX          ;ALIGN
+ 296: 1085+10	0159' F1      	        POP     AF
+ 297: 1095+4	015A' 7A      	        LD      A,D             ;SIGN OF LARGER
+ 298: 1099+8	015B' CBFA    	        SET     7,D             ;IMPLIED 1
+ 299: 1107+10	015D' FA6A01  	        JP      M,FADD3         ;SIGNS DIFFERENT
+ 300: 1117+17	0160' CD5A0A  	        CALL    ADD             ;HLH'L'=HLH'L'+DED'E'
+ 301: 1134+10+7	0163' DCE009  	        CALL    C,DIV2          ;NORMALISE
+ 302: 1144+8	0166' CBFC    	        SET     7,H
+ 303: 1152+12	0168' 180A    	        JR      FADD4
+ 304:				;
+ 305: 1164+17	016A' CD600A  	FADD3:  CALL    SUB             ;HLH'L'=HLH'L'-DED'E'
+ 306: 1181+10+7	016D' DC1509  	        CALL    C,NEG           ;NEGATE HLH'L'B'C'
+ 307: 1191+17	0170' CD8209  	        CALL    FLO48
+ 308: 1208+4	0173' 2F      	        CPL                     ;CHANGE RESULT SIGN
+ 309: 1212+4	0174' D9      	FADD4:  EXX
+ 310: 1216+4	0175' EB      	        EX      DE,HL
+ 311: 1220+10	0176' 210080  	        LD      HL,8000H
+ 312: 1230+4	0179' B7      	        OR      A               ;CLEAR CARRY
+ 313: 1234+15	017A' ED42    	        SBC     HL,BC
+ 314: 1249+4	017C' EB      	        EX      DE,HL
+ 315: 1253+4	017D' D9      	        EXX
+ 316: 1257+10+7	017E' CCD209  	        CALL    Z,ODD           ;ROUND UNBIASSED
+ 317: 1267+10+7	0181' DCC409  	        CALL    C,ADD1          ;ROUND UP
+ 318: 1277+10+7	0184' DCEC09  	        CALL    C,INCC
+ 319: 1287+8	0187' CBBC    	        RES     7,H
+ 320: 1295+4	0189' 0D      	        DEC     C
+ 321: 1299+4	018A' 0C      	        INC     C
+ 322: 1303+10	018B' CA1D0A  	        JP      Z,ZERO
+ 323: 1313+4	018E' B7      	        OR      A               ;RESULT SIGNQ
+ 324: 1317+5+6	018F' F0      	        RET     P               ;POSITIVE
+ 325: 1322+8	0190' CBFC    	        SET     7,H             ;NEGATIVE
+ 326: 1330+10	0192' C9      	        RET
+ 327:				;
+ 328:				;IDIV - Integer division.
+ 329:				;FDIV - Floating point division with rounding.
+ 330:				;
+ 331: 1340+17	0193' CDA509  	IDIV:   CALL    FLOAT2
+ 332: 1357+4	0196' 05      	FDIV:   DEC     B               ;TEST FOR ZERO
+ 333: 1361+4	0197' 04      	        INC     B
+ 334: 1365+7	0198' 3E12    	        LD      A,DIVBY0
+ 335: 1372+10	019A' CA1100  	        JP      Z,ERROR         ;"Division by zero"
+ 336: 1382+4	019D' 0D      	        DEC     C               ;TEST FOR ZERO
+ 337: 1386+4	019E' 0C      	        INC     C
+ 338: 1390+5+6	019F' C8      	        RET     Z
+ 339: 1395+4	01A0' 7C      	        LD      A,H
+ 340: 1399+4	01A1' AA      	        XOR     D               ;CALC. RESULT SIGN
+ 341: 1403+4	01A2' 08      	        EX      AF,AF'          ;SAVE SIGN
+ 342: 1407+8	01A3' CBFA    	        SET     7,D             ;REPLACE IMPLIED 1's
+ 343: 1415+8	01A5' CBFC    	        SET     7,H
+ 344: 1423+11	01A7' C5      	        PUSH    BC              ;SAVE EXPONENTS
+ 345: 1434+4	01A8' 42      	        LD      B,D             ;LOAD REGISTERS
+ 346: 1438+4	01A9' 4B      	        LD      C,E
+ 347: 1442+10	01AA' 110000  	        LD      DE,0
+ 348: 1452+4	01AD' D9      	        EXX
+ 349: 1456+4	01AE' 42      	        LD      B,D
+ 350: 1460+4	01AF' 4B      	        LD      C,E
+ 351: 1464+10	01B0' 110000  	        LD      DE,0
+ 352: 1474+7	01B3' 3EE0    	        LD      A,-32           ;LOOP COUNTER
+ 353: 1481+17	01B5' CD2D0B  	        CALL    DIVA            ;DIVIDE
+ 354: 1498+4	01B8' D9      	        EXX
+ 355: 1502+8	01B9' CB7A    	        BIT     7,D
+ 356: 1510+4	01BB' D9      	        EXX
+ 357: 1514+10+7	01BC' CC480B  	        CALL    Z,DIVB          ;NORMALISE & INC A
+ 358: 1524+4	01BF' EB      	        EX      DE,HL
+ 359: 1528+4	01C0' D9      	        EXX
+ 360: 1532+8	01C1' CB38    	        SRL     B               ;DIVISOR/2
+ 361: 1540+8	01C3' CB19    	        RR      C
+ 362: 1548+4	01C5' B7      	        OR      A               ;CLEAR CARRY
+ 363: 1552+15	01C6' ED42    	        SBC     HL,BC           ;REMAINDER-DIVISOR/2
+ 364: 1567+4	01C8' 3F      	        CCF
+ 365: 1571+4	01C9' EB      	        EX      DE,HL           ;RESULT IN HLH'L'
+ 366: 1575+10+7	01CA' CCD209  	        CALL    Z,ODD           ;ROUND UNBIASSED
+ 367: 1585+10+7	01CD' DCC409  	        CALL    C,ADD1          ;ROUND UP
+ 368: 1595+10	01D0' C1      	        POP     BC              ;RESTORE EXPONENTS
+ 369: 1605+10+7	01D1' DCEC09  	        CALL    C,INCC
+ 370: 1615+4	01D4' 1F      	        RRA                     ;LSB OF A TO CARRY
+ 371: 1619+4	01D5' 79      	        LD      A,C             ;COMPUTE NEW EXPONENT
+ 372: 1623+4	01D6' 98      	        SBC     A,B
+ 373: 1627+4	01D7' 3F      	        CCF
+ 374: 1631+10	01D8' C36202  	        JP      CHKOVF
+ 375:				;
+ 376:				;IMUL - Integer multiplication.
+ 377:				;
+ 378: 1641+4	01DB' 7C      	IMUL:   LD      A,H
+ 379: 1645+4	01DC' AA      	        XOR     D
+ 380: 1649+4	01DD' 08      	        EX      AF,AF'          ;SAVE RESULT SIGN
+ 381: 1653+8	01DE' CB7C    	        BIT     7,H
+ 382: 1661+10+7	01E0' C40109  	        CALL    NZ,NEGATE
+ 383: 1671+17	01E3' CDD809  	        CALL    SWAP
+ 384: 1688+8	01E6' CB7C    	        BIT     7,H
+ 385: 1696+10+7	01E8' C40109  	        CALL    NZ,NEGATE
+ 386: 1706+4	01EB' 44      	        LD      B,H
+ 387: 1710+4	01EC' 4D      	        LD      C,L
+ 388: 1714+10	01ED' 210000  	        LD      HL,0
+ 389: 1724+4	01F0' D9      	        EXX
+ 390: 1728+4	01F1' 44      	        LD      B,H
+ 391: 1732+4	01F2' 4D      	        LD      C,L
+ 392: 1736+10	01F3' 210000  	        LD      HL,0
+ 393: 1746+7	01F6' 3EDF    	        LD      A,-33
+ 394: 1753+17	01F8' CD5B0B  	        CALL    MULA            ;MULTIPLY
+ 395: 1770+4	01FB' D9      	        EXX
+ 396: 1774+7	01FC' 0EBF    	        LD      C,191           ;PRESET EXPONENT
+ 397: 1781+17	01FE' CDFD09  	        CALL    TEST            ;TEST RANGE
+ 398: 1798+7+5	0201' 200D    	        JR      NZ,IMUL1        ;TOO BIG
+ 399: 1805+8	0203' CB7A    	        BIT     7,D
+ 400: 1813+7+5	0205' 2009    	        JR      NZ,IMUL1
+ 401: 1820+17	0207' CDD809  	        CALL    SWAP
+ 402: 1837+4	020A' 4A      	        LD      C,D             ;INTEGER MARKER
+ 403: 1841+4	020B' 08      	        EX      AF,AF'
+ 404: 1845+5+6	020C' F0      	        RET     P
+ 405: 1850+10	020D' C30109  	        JP      NEGATE
+ 406:				;
+ 407: 1860+4	0210' 0D      	IMUL1:  DEC     C
+ 408: 1864+4	0211' D9      	        EXX
+ 409: 1868+8	0212' CB23    	        SLA     E
+ 410: 1876+8	0214' CB12    	        RL      D
+ 411: 1884+4	0216' D9      	        EXX
+ 412: 1888+8	0217' CB13    	        RL      E
+ 413: 1896+8	0219' CB12    	        RL      D
+ 414: 1904+4	021B' D9      	        EXX
+ 415: 1908+15	021C' ED6A    	        ADC     HL,HL
+ 416: 1923+4	021E' D9      	        EXX
+ 417: 1927+15	021F' ED6A    	        ADC     HL,HL
+ 418: 1942+10	0221' F21002  	        JP      P,IMUL1         ;NORMALISE
+ 419: 1952+4	0224' 08      	        EX      AF,AF'
+ 420: 1956+5+6	0225' F8      	        RET     M
+ 421: 1961+8	0226' CBBC    	        RES     7,H             ;POSITIVE
+ 422: 1969+10	0228' C9      	        RET
+ 423:				;
+ 424:				;FMUL - Floating point multiplication with rounding.
+ 425:				;
+ 426: 1979+4	0229' 05      	FMUL:   DEC     B               ;TEST FOR ZERO
+ 427: 1983+4	022A' 04      	        INC     B
+ 428: 1987+10	022B' CA1D0A  	        JP      Z,ZERO
+ 429: 1997+4	022E' 0D      	        DEC     C               ;TEST FOR ZERO
+ 430: 2001+4	022F' 0C      	        INC     C
+ 431: 2005+5+6	0230' C8      	        RET     Z
+ 432: 2010+4	0231' 7C      	        LD      A,H
+ 433: 2014+4	0232' AA      	        XOR     D               ;CALC. RESULT SIGN
+ 434: 2018+4	0233' 08      	        EX      AF,AF'
+ 435: 2022+8	0234' CBFA    	        SET     7,D             ;REPLACE IMPLIED 1's
+ 436: 2030+8	0236' CBFC    	        SET     7,H
+ 437: 2038+11	0238' C5      	        PUSH    BC              ;SAVE EXPONENTS
+ 438: 2049+4	0239' 44      	        LD      B,H             ;LOAD REGISTERS
+ 439: 2053+4	023A' 4D      	        LD      C,L
+ 440: 2057+10	023B' 210000  	        LD      HL,0
+ 441: 2067+4	023E' D9      	        EXX
+ 442: 2071+4	023F' 44      	        LD      B,H
+ 443: 2075+4	0240' 4D      	        LD      C,L
+ 444: 2079+10	0241' 210000  	        LD      HL,0
+ 445: 2089+7	0244' 3EE0    	        LD      A,-32           ;LOOP COUNTER
+ 446: 2096+17	0246' CD5B0B  	        CALL    MULA            ;MULTIPLY
+ 447: 2113+10+7	0249' DC6F0B  	        CALL    C,MULB          ;NORMALISE & INC A
+ 448: 2123+4	024C' D9      	        EXX
+ 449: 2127+11	024D' E5      	        PUSH    HL
+ 450: 2138+10	024E' 210080  	        LD      HL,8000H
+ 451: 2148+4	0251' B7      	        OR      A               ;CLEAR CARRY
+ 452: 2152+15	0252' ED52    	        SBC     HL,DE
+ 453: 2167+10	0254' E1      	        POP     HL
+ 454: 2177+10+7	0255' CCD209  	        CALL    Z,ODD           ;ROUND UNBIASSED
+ 455: 2187+10+7	0258' DCC409  	        CALL    C,ADD1          ;ROUND UP
+ 456: 2197+10	025B' C1      	        POP     BC              ;RESTORE EXPONENTS
+ 457: 2207+10+7	025C' DCEC09  	        CALL    C,INCC
+ 458: 2217+4	025F' 1F      	        RRA                     ;LSB OF A TO CARRY
+ 459: 2221+4	0260' 79      	        LD      A,C             ;COMPUTE NEW EXPONENT
+ 460: 2225+4	0261' 88      	        ADC     A,B
+ 461: 2229+7+5	0262' 3805    	CHKOVF: JR      C,CHKO1
+ 462: 2236+10	0264' F21D0A  	        JP      P,ZERO          ;UNDERFLOW
+ 463: 2246+12	0267' 1803    	        JR      CHKO2
+ 464: 2258+10	0269' FAEE09  	CHKO1:  JP      M,OFLOW         ;OVERFLOW
+ 465: 2268+7	026C' C680    	CHKO2:  ADD     A,80H
+ 466: 2275+4	026E' 4F      	        LD      C,A
+ 467: 2279+10	026F' CA1D0A  	        JP      Z,ZERO
+ 468: 2289+4	0272' 08      	        EX      AF,AF'          ;RESTORE SIGN BIT
+ 469: 2293+8	0273' CBBC    	        RES     7,H
+ 470: 2301+5+6	0275' F0      	        RET     P
+ 471: 2306+8	0276' CBFC    	        SET     7,H
+ 472: 2314+10	0278' C9      	        RET
+ 473:				;
+ 474:				;IPOW - Integer involution.
+ 475:				;
+ 476: 2324+17	0279' CDD809  	IPOW:   CALL    SWAP
+ 477: 2341+8	027C' CB7C    	        BIT     7,H
+ 478: 2349+11	027E' F5      	        PUSH    AF              ;SAVE SIGN
+ 479: 2360+10+7	027F' C40109  	        CALL    NZ,NEGATE
+ 480: 2370+4	0282' 48      	IPOW0:  LD      C,B
+ 481: 2374+7	0283' 0620    	        LD      B,32            ;LOOP COUNTER
+ 482: 2381+17	0285' CD770A  	IPOW1:  CALL    X2
+ 483: 2398+7+5	0288' 3808    	        JR      C,IPOW2
+ 484: 2405+8+5	028A' 10F9    	        DJNZ    IPOW1
+ 485: 2413+10	028C' F1      	        POP     AF
+ 486: 2423+4	028D' D9      	        EXX
+ 487: 2427+4	028E' 2C      	        INC     L               ;RESULT=1
+ 488: 2431+4	028F' D9      	        EXX
+ 489: 2435+4	0290' 4C      	        LD      C,H
+ 490: 2439+10	0291' C9      	        RET
+ 491:				;
+ 492: 2449+10	0292' F1      	IPOW2:  POP     AF
+ 493: 2459+11	0293' C5      	        PUSH    BC
+ 494: 2470+4	0294' EB      	        EX      DE,HL
+ 495: 2474+11	0295' E5      	        PUSH    HL
+ 496: 2485+4	0296' D9      	        EXX
+ 497: 2489+4	0297' EB      	        EX      DE,HL
+ 498: 2493+11	0298' E5      	        PUSH    HL
+ 499: 2504+4	0299' D9      	        EXX
+ 500: 2508+14	029A' DD210000	        LD      IX,0
+ 501: 2522+15	029E' DD39    	        ADD     IX,SP
+ 502: 2537+7+5	02A0' 2842    	        JR      Z,IPOW4
+ 503: 2544+11	02A2' C5      	        PUSH    BC
+ 504: 2555+4	02A3' D9      	        EXX
+ 505: 2559+11	02A4' D5      	        PUSH    DE
+ 506: 2570+4	02A5' D9      	        EXX
+ 507: 2574+11	02A6' D5      	        PUSH    DE
+ 508: 2585+17	02A7' CDAE09  	        CALL    SFLOAT
+ 509: 2602+17	02AA' CD7905  	        CALL    RECIP
+ 510: 2619+19	02AD' DD7104  	        LD      (IX+4),C
+ 511: 2638+4	02B0' D9      	        EXX
+ 512: 2642+19	02B1' DD7500  	        LD      (IX+0),L
+ 513: 2661+19	02B4' DD7401  	        LD      (IX+1),H
+ 514: 2680+4	02B7' D9      	        EXX
+ 515: 2684+19	02B8' DD7502  	        LD      (IX+2),L
+ 516: 2703+19	02BB' DD7403  	        LD      (IX+3),H
+ 517: 2722+12	02BE' 181D    	        JR      IPOW5
+ 518:				;
+ 519: 2734+11	02C0' C5      	IPOW3:  PUSH    BC
+ 520: 2745+4	02C1' D9      	        EXX
+ 521: 2749+8	02C2' CB23    	        SLA     E
+ 522: 2757+8	02C4' CB12    	        RL      D
+ 523: 2765+11	02C6' D5      	        PUSH    DE
+ 524: 2776+4	02C7' D9      	        EXX
+ 525: 2780+8	02C8' CB13    	        RL      E
+ 526: 2788+8	02CA' CB12    	        RL      D
+ 527: 2796+11	02CC' D5      	        PUSH    DE
+ 528: 2807+7	02CD' 3E0A    	        LD      A,'*' AND 0FH
+ 529: 2814+11	02CF' F5      	        PUSH    AF
+ 530: 2825+17	02D0' CD890A  	        CALL    COPY
+ 531: 2842+17	02D3' CD1700  	        CALL    OP              ;SQUARE
+ 532: 2859+10	02D6' F1      	        POP     AF
+ 533: 2869+17	02D7' CD1D08  	        CALL    DLOAD5
+ 534: 2886+10+7	02DA' DC1700  	        CALL    C,OP            ;MULTIPLY BY X
+ 535: 2896+10	02DD' D1      	IPOW5:  POP     DE
+ 536: 2906+4	02DE' D9      	        EXX
+ 537: 2910+10	02DF' D1      	        POP     DE
+ 538: 2920+4	02E0' D9      	        EXX
+ 539: 2924+4	02E1' 79      	        LD      A,C
+ 540: 2928+10	02E2' C1      	        POP     BC
+ 541: 2938+4	02E3' 4F      	        LD      C,A
+ 542: 2942+8+5	02E4' 10DA    	IPOW4:  DJNZ    IPOW3
+ 543: 2950+10	02E6' F1      	        POP     AF
+ 544: 2960+10	02E7' F1      	        POP     AF
+ 545: 2970+10	02E8' F1      	        POP     AF
+ 546: 2980+10	02E9' C9      	        RET
+ 547:				;
+ 548: 2990+10	02EA' F1      	FPOW0:  POP     AF
+ 549: 3000+10	02EB' F1      	        POP     AF
+ 550: 3010+10	02EC' F1      	        POP     AF
+ 551: 3020+12	02ED' 1893    	        JR      IPOW0
+ 552:				;
+ 553:				;FPOW - Floating-point involution.
+ 554:				;
+ 555: 3032+8	02EF' CB7A    	FPOW:   BIT     7,D
+ 556: 3040+11	02F1' F5      	        PUSH    AF
+ 557: 3051+17	02F2' CDD809  	        CALL    SWAP
+ 558: 3068+17	02F5' CD970A  	        CALL    PUSH5
+ 559: 3085+4	02F8' 0D      	        DEC     C
+ 560: 3089+4	02F9' 0C      	        INC     C
+ 561: 3093+7+5	02FA' 28EE    	        JR      Z,FPOW0
+ 562: 3100+7	02FC' 3E9E    	        LD      A,158
+ 563: 3107+4	02FE' B9      	        CP      C
+ 564: 3111+7+5	02FF' 3808    	        JR      C,FPOW1
+ 565: 3118+4	0301' 3C      	        INC     A
+ 566: 3122+17	0302' CDD908  	        CALL    FIX
+ 567: 3139+4	0305' 08      	        EX      AF,AF'
+ 568: 3143+10	0306' F2EA02  	        JP      P,FPOW0
+ 569: 3153+17	0309' CDD809  	FPOW1:  CALL    SWAP
+ 570: 3170+17	030C' CD9005  	        CALL    LN0
+ 571: 3187+17	030F' CDA00A  	        CALL    POP5
+ 572: 3204+10	0312' F1      	        POP     AF
+ 573: 3214+17	0313' CD2902  	        CALL    FMUL
+ 574: 3231+10	0316' C30505  	        JP      EXP0
+ 575:				;
+ 576:				;Integer and floating-point compare.
+ 577:				;Result is TRUE (-1) or FALSE (0).
+ 578:				;
+ 579: 3241+17	0319' CD270A  	FLT:    CALL    FCP
+ 580: 3258+12	031C' 1803    	        JR      ILT1
+ 581: 3270+17	031E' CD1A0A  	ILT:    CALL    ICP
+ 582: 3287+5+6	0321' D0      	ILT1:   RET     NC
+ 583: 3292+12	0322' 1838    	        JR      TRUE
+ 584:				;
+ 585: 3304+17	0324' CD270A  	FGT:    CALL    FCP
+ 586: 3321+12	0327' 1803    	        JR      IGT1
+ 587: 3333+17	0329' CD1A0A  	IGT:    CALL    ICP
+ 588: 3350+5+6	032C' C8      	IGT1:   RET     Z
+ 589: 3355+5+6	032D' D8      	        RET     C
+ 590: 3360+12	032E' 182C    	        JR      TRUE
+ 591:				;
+ 592: 3372+17	0330' CD270A  	FGE:    CALL    FCP
+ 593: 3389+12	0333' 1803    	        JR      IGE1
+ 594: 3401+17	0335' CD1A0A  	IGE:    CALL    ICP
+ 595: 3418+5+6	0338' D8      	IGE1:   RET     C
+ 596: 3423+12	0339' 1821    	        JR      TRUE
+ 597:				;
+ 598: 3435+17	033B' CD270A  	FLE:    CALL    FCP
+ 599: 3452+12	033E' 1803    	        JR      ILE1
+ 600: 3464+17	0340' CD1A0A  	ILE:    CALL    ICP
+ 601: 3481+7+5	0343' 2817    	ILE1:   JR      Z,TRUE
+ 602: 3488+5+6	0345' D0      	        RET     NC
+ 603: 3493+12	0346' 1814    	        JR      TRUE
+ 604:				;
+ 605: 3505+17	0348' CD270A  	FNE:    CALL    FCP
+ 606: 3522+12	034B' 1803    	        JR      INE1
+ 607: 3534+17	034D' CD1A0A  	INE:    CALL    ICP
+ 608: 3551+5+6	0350' C8      	INE1:   RET     Z
+ 609: 3556+12	0351' 1809    	        JR      TRUE
+ 610:				;
+ 611: 3568+17	0353' CD270A  	FEQ:    CALL    FCP
+ 612: 3585+12	0356' 1803    	        JR      IEQ1
+ 613: 3597+17	0358' CD1A0A  	IEQ:    CALL    ICP
+ 614: 3614+5+6	035B' C0      	IEQ1:   RET     NZ
+ 615: 3619+10	035C' 21FFFF  	TRUE:   LD      HL,-1
+ 616: 3629+4	035F' D9      	        EXX
+ 617: 3633+10	0360' 21FFFF  	        LD      HL,-1
+ 618: 3643+4	0363' D9      	        EXX
+ 619: 3647+4	0364' AF      	        XOR     A
+ 620: 3651+4	0365' 4F      	        LD      C,A
+ 621: 3655+10	0366' C9      	        RET
+ 622:				;
+ 624:				;
+ 625:				;FUNCTIONS:
+ 626:				;
+ 627:				;Result returned in HLH'L'C (floating point)
+ 628:				;Result returned in HLH'L' (C=0) (integer)
+ 629:				;All registers except IY destroyed.
+ 630:				;
+ 631:				;ABS - Absolute value
+ 632:				;Result is numeric, variable type.
+ 633:				;
+ 634: 3665+8	0367' CB7C    	ABS:    BIT     7,H
+ 635: 3673+5+6	0369' C8      	        RET     Z               ;POSITIVE/ZERO
+ 636: 3678+4	036A' 0D      	        DEC     C
+ 637: 3682+4	036B' 0C      	        INC     C
+ 638: 3686+10	036C' CA0109  	        JP      Z,NEGATE        ;INTEGER
+ 639: 3696+8	036F' CBBC    	        RES     7,H
+ 640: 3704+10	0371' C9      	        RET
+ 641:				;
+ 642:				;NOT - Complement integer.
+ 643:				;Result is integer numeric.
+ 644:				;
+ 645: 3714+17	0372' CDF208  	NOTK:   CALL    SFIX
+ 646: 3731+4	0375' 7C      	        LD      A,H
+ 647: 3735+4	0376' 2F      	        CPL
+ 648: 3739+4	0377' 67      	        LD      H,A
+ 649: 3743+4	0378' 7D      	        LD      A,L
+ 650: 3747+4	0379' 2F      	        CPL
+ 651: 3751+4	037A' 6F      	        LD      L,A
+ 652: 3755+4	037B' D9      	        EXX
+ 653: 3759+4	037C' 7C      	        LD      A,H
+ 654: 3763+4	037D' 2F      	        CPL
+ 655: 3767+4	037E' 67      	        LD      H,A
+ 656: 3771+4	037F' 7D      	        LD      A,L
+ 657: 3775+4	0380' 2F      	        CPL
+ 658: 3779+4	0381' 6F      	        LD      L,A
+ 659: 3783+4	0382' D9      	        EXX
+ 660: 3787+4	0383' AF      	        XOR     A               ;NUMERIC MARKER
+ 661: 3791+10	0384' C9      	        RET
+ 662:				;
+ 663:				;PI - Return PI (3.141592654)
+ 664:				;Result is floating-point numeric.
+ 665:				;
+ 666: 3801+10	0385' 210F49  	PI:     LD      HL,490FH
+ 667: 3811+4	0388' D9      	        EXX
+ 668: 3815+10	0389' 21A2DA  	        LD      HL,0DAA2H
+ 669: 3825+4	038C' D9      	        EXX
+ 670: 3829+7	038D' 0E81    	        LD      C,81H
+ 671: 3836+4	038F' AF      	        XOR     A               ;NUMERIC MARKER
+ 672: 3840+10	0390' C9      	        RET
+ 673:				;
+ 674:				;DEG - Convert radians to degrees
+ 675:				;Result is floating-point numeric.
+ 676:				;
+ 677: 3850+17	0391' CDA103  	DEG:    CALL    FPI180
+ 678: 3867+17	0394' CD2902  	        CALL    FMUL
+ 679: 3884+4	0397' AF      	        XOR     A
+ 680: 3888+10	0398' C9      	        RET
+ 681:				;
+ 682:				;RAD - Convert degrees to radians
+ 683:				;Result is floating-point numeric.
+ 684:				;
+ 685: 3898+17	0399' CDA103  	RAD:    CALL    FPI180
+ 686: 3915+17	039C' CD9601  	        CALL    FDIV
+ 687: 3932+4	039F' AF      	        XOR     A
+ 688: 3936+10	03A0' C9      	        RET
+ 689:				;
+ 690:				;180/PI
+ 691:				;
+ 692: 3946+17	03A1' CDAE09  	FPI180: CALL    SFLOAT
+ 693: 3963+10	03A4' 112E65  	        LD      DE,652EH
+ 694: 3973+4	03A7' D9      	        EXX
+ 695: 3977+10	03A8' 11D3E0  	        LD      DE,0E0D3H
+ 696: 3987+4	03AB' D9      	        EXX
+ 697: 3991+7	03AC' 0685    	        LD      B,85H
+ 698: 3998+10	03AE' C9      	        RET
+ 699:				;
+ 700:				;SGN - Return -1, 0 or +1
+ 701:				;Result is integer numeric.
+ 702:				;
+ 703: 4008+17	03AF' CDFD09  	SGN:    CALL    TEST
+ 704: 4025+4	03B2' B1      	        OR      C
+ 705: 4029+5+6	03B3' C8      	        RET     Z               ;ZERO
+ 706: 4034+8	03B4' CB7C    	        BIT     7,H
+ 707: 4042+10	03B6' C25C03  	        JP      NZ,TRUE         ;-1
+ 708: 4052+17	03B9' CD1D0A  	        CALL    ZERO
+ 709: 4069+10	03BC' C3C409  	        JP      ADD1            ;1
+ 710:				;
+ 711:				;VAL - Return numeric value of string.
+ 712:				;Input: ASCII string at IX
+ 713:				;Result is variable type numeric.
+ 714:				;
+ 715: 4079+17	03BF' CDE80B  	VAL:    CALL    SIGNQ
+ 716: 4096+11	03C2' F5      	        PUSH    AF
+ 717: 4107+17	03C3' CD2F08  	        CALL    CON
+ 718: 4124+10	03C6' F1      	        POP     AF
+ 719: 4134+7	03C7' FE2D    	        CP      '-'
+ 720: 4141+7	03C9' 3E00    	        LD      A,0             ;NUMERIC MARKER
+ 721: 4148+5+6	03CB' C0      	        RET     NZ
+ 722: 4153+4	03CC' 0D      	        DEC     C
+ 723: 4157+4	03CD' 0C      	        INC     C
+ 724: 4161+10	03CE' CA0109  	        JP      Z,NEGATE        ;ZERO/INTEGER
+ 725: 4171+4	03D1' 7C      	        LD      A,H
+ 726: 4175+7	03D2' EE80    	        XOR     80H             ;CHANGE SIGN (FP)
+ 727: 4182+4	03D4' 67      	        LD      H,A
+ 728: 4186+4	03D5' AF      	        XOR     A
+ 729: 4190+10	03D6' C9      	        RET
+ 730:				;
+ 731:				;INT - Floor function
+ 732:				;Result is integer numeric.
+ 733:				;
+ 734: 4200+4	03D7' 0D      	INT:    DEC     C
+ 735: 4204+4	03D8' 0C      	        INC     C
+ 736: 4208+5+6	03D9' C8      	        RET     Z               ;ZERO/INTEGER
+ 737: 4213+7	03DA' 3E9F    	        LD      A,159
+ 738: 4220+4	03DC' 44      	        LD      B,H             ;B7=SIGN BIT
+ 739: 4224+17	03DD' CDD908  	        CALL    FIX
+ 740: 4241+4	03E0' 08      	        EX      AF,AF'
+ 741: 4245+4	03E1' A0      	        AND     B
+ 742: 4249+10+7	03E2' FCC409  	        CALL    M,ADD1          ;NEGATIVE NON-INTEGER
+ 743: 4259+4	03E5' 78      	        LD      A,B
+ 744: 4263+4	03E6' B7      	        OR      A
+ 745: 4267+10+7	03E7' FC0109  	        CALL    M,NEGATE
+ 746: 4277+4	03EA' AF      	        XOR     A
+ 747: 4281+4	03EB' 4F      	        LD      C,A
+ 748: 4285+10	03EC' C9      	        RET
+ 749:				;
+ 750:				;SQR - square root
+ 751:				;Result is floating-point numeric.
+ 752:				;
+ 753: 4295+17	03ED' CDAE09  	SQR:    CALL    SFLOAT
+ 754: 4312+8	03F0' CB7C    	SQR0:   BIT     7,H
+ 755: 4320+7	03F2' 3E15    	        LD      A,NGROOT
+ 756: 4327+10	03F4' C21100  	        JP      NZ,ERROR        ;"-ve root"
+ 757: 4337+4	03F7' 0D      	        DEC     C
+ 758: 4341+4	03F8' 0C      	        INC     C
+ 759: 4345+5+6	03F9' C8      	        RET     Z               ;ZERO
+ 760: 4350+8	03FA' CBFC    	        SET     7,H             ;IMPLIED 1
+ 761: 4358+8	03FC' CB41    	        BIT     0,C
+ 762: 4366+10+7	03FE' CCE009  	        CALL    Z,DIV2          ;MAKE EXPONENT ODD
+ 763: 4376+4	0401' 79      	        LD      A,C
+ 764: 4380+7	0402' D680    	        SUB     80H
+ 765: 4387+8	0404' CB2F    	        SRA     A               ;HALVE EXPONENT
+ 766: 4395+7	0406' C680    	        ADD     A,80H
+ 767: 4402+4	0408' 4F      	        LD      C,A
+ 768: 4406+11	0409' C5      	        PUSH    BC              ;SAVE EXPONENT
+ 769: 4417+4	040A' EB      	        EX      DE,HL
+ 770: 4421+10	040B' 210000  	        LD      HL,0
+ 771: 4431+4	040E' 44      	        LD      B,H
+ 772: 4435+4	040F' 4D      	        LD      C,L
+ 773: 4439+4	0410' D9      	        EXX
+ 774: 4443+4	0411' EB      	        EX      DE,HL
+ 775: 4447+10	0412' 210000  	        LD      HL,0
+ 776: 4457+4	0415' 44      	        LD      B,H
+ 777: 4461+4	0416' 4D      	        LD      C,L
+ 778: 4465+7	0417' 3EE1    	        LD      A,-31
+ 779: 4472+17	0419' CD8E0B  	        CALL    SQRA            ;ROOT
+ 780: 4489+4	041C' D9      	        EXX
+ 781: 4493+8	041D' CB78    	        BIT     7,B
+ 782: 4501+4	041F' D9      	        EXX
+ 783: 4505+10+7	0420' CC8E0B  	        CALL    Z,SQRA          ;NORMALISE & INC A
+ 784: 4515+17	0423' CDC70B  	        CALL    SQRB
+ 785: 4532+4	0426' B7      	        OR      A               ;CLEAR CARRY
+ 786: 4536+17	0427' CD480B  	        CALL    DIVB
+ 787: 4553+8	042A' CB1B    	        RR      E               ;LSB TO CARRY
+ 788: 4561+4	042C' 60      	        LD      H,B
+ 789: 4565+4	042D' 69      	        LD      L,C
+ 790: 4569+4	042E' D9      	        EXX
+ 791: 4573+4	042F' 60      	        LD      H,B
+ 792: 4577+4	0430' 69      	        LD      L,C
+ 793: 4581+10+7	0431' DCC409  	        CALL    C,ADD1          ;ROUND UP
+ 794: 4591+10	0434' C1      	        POP     BC              ;RESTORE EXPONENT
+ 795: 4601+10+7	0435' DCEC09  	        CALL    C,INCC
+ 796: 4611+4	0438' 1F      	        RRA
+ 797: 4615+4	0439' 9F      	        SBC     A,A
+ 798: 4619+4	043A' 81      	        ADD     A,C
+ 799: 4623+4	043B' 4F      	        LD      C,A
+ 800: 4627+8	043C' CBBC    	        RES     7,H             ;POSITIVE
+ 801: 4635+4	043E' AF      	        XOR     A
+ 802: 4639+10	043F' C9      	        RET
+ 803:				;
+ 804:				;TAN - Tangent function
+ 805:				;Result is floating-point numeric.
+ 806:				;
+ 807: 4649+17	0440' CDAE09  	TAN:    CALL    SFLOAT
+ 808: 4666+17	0443' CD970A  	        CALL    PUSH5
+ 809: 4683+17	0446' CD6004  	        CALL    COS0
+ 810: 4700+17	0449' CDA00A  	        CALL    POP5
+ 811: 4717+17	044C' CD970A  	        CALL    PUSH5
+ 812: 4734+17	044F' CDD809  	        CALL    SWAP
+ 813: 4751+17	0452' CD6B04  	        CALL    SIN0
+ 814: 4768+17	0455' CDA00A  	        CALL    POP5
+ 815: 4785+17	0458' CD9601  	        CALL    FDIV
+ 816: 4802+4	045B' AF      	        XOR     A               ;NUMERIC MARKER
+ 817: 4806+10	045C' C9      	        RET
+ 818:				;
+ 819:				;COS - Cosine function
+ 820:				;Result is floating-point numeric.
+ 821:				;
+ 822: 4816+17	045D' CDAE09  	COS:    CALL    SFLOAT
+ 823: 4833+17	0460' CD2309  	COS0:   CALL    SCALE
+ 824: 4850+4	0463' 1C      	        INC     E
+ 825: 4854+4	0464' 1C      	        INC     E
+ 826: 4858+4	0465' 7B      	        LD      A,E
+ 827: 4862+12	0466' 180E    	        JR      SIN1
+ 828:				;
+ 829:				;SIN - Sine function
+ 830:				;Result is floating-point numeric.
+ 831:				;
+ 832: 4874+17	0468' CDAE09  	SIN:    CALL    SFLOAT
+ 833: 4891+11	046B' E5      	SIN0:   PUSH    HL              ;H7=SIGN
+ 834: 4902+17	046C' CD2309  	        CALL    SCALE
+ 835: 4919+10	046F' F1      	        POP     AF
+ 836: 4929+4	0470' 07      	        RLCA
+ 837: 4933+4	0471' 07      	        RLCA
+ 838: 4937+4	0472' 07      	        RLCA
+ 839: 4941+7	0473' E604    	        AND     4
+ 840: 4948+4	0475' AB      	        XOR     E
+ 841: 4952+11	0476' F5      	SIN1:   PUSH    AF              ;OCTANT
+ 842: 4963+8	0477' CBBC    	        RES     7,H
+ 843: 4971+4	0479' 1F      	        RRA
+ 844: 4975+17	047A' CDF704  	        CALL    PIBY4
+ 845: 4992+10+7	047D' DC2E01  	        CALL    C,RSUB          ;X=(PI/4)-X
+ 846: 5002+10	0480' F1      	        POP     AF
+ 847: 5012+11	0481' F5      	        PUSH    AF
+ 848: 5023+7	0482' E603    	        AND     3
+ 849: 5030+10	0484' E2B504  	        JP      PO,SIN2         ;USE COSINE APPROX.
+ 850: 5040+17	0487' CD970A  	        CALL    PUSH5           ;SAVE X
+ 851: 5057+17	048A' CD910A  	        CALL    SQUARE          ;PUSH X*X
+ 852: 5074+17	048D' CDCA0A  	        CALL    POLY
+ 853:     -	0490' B7A8    	        DEFW    0A8B7H          ;a(8)
+ 854:     -	0492' 1136    	        DEFW    3611H
+ 855:     -	0494' 6D      	        DEFB    6DH
+ 856:     -	0495' 26DE    	        DEFW    0DE26H          ;a(6)
+ 857:     -	0497' 05D0    	        DEFW    0D005H
+ 858:     -	0499' 73      	        DEFB    73H
+ 859:     -	049A' C080    	        DEFW    80C0H           ;a(4)
+ 860:     -	049C' 8808    	        DEFW    888H
+ 861:     -	049E' 79      	        DEFB    79H
+ 862:     -	049F' 9DAA    	        DEFW    0AA9DH          ;a(2)
+ 863:     -	04A1' AAAA    	        DEFW    0AAAAH
+ 864:     -	04A3' 7D      	        DEFB    7DH
+ 865:     -	04A4' 0000    	        DEFW    0               ;a(0)
+ 866:     -	04A6' 0000    	        DEFW    0
+ 867:     -	04A8' 80      	        DEFB    80H
+ 868: 5091+17	04A9' CDA00A  	        CALL    POP5
+ 869: 5108+17	04AC' CDA00A  	        CALL    POP5
+ 870: 5125+17	04AF' CD2902  	        CALL    FMUL
+ 871: 5142+10	04B2' C3D704  	        JP      SIN3
+ 872:				;
+ 873: 5152+17	04B5' CD910A  	SIN2:   CALL    SQUARE          ;PUSH X*X
+ 874: 5169+17	04B8' CDCA0A  	        CALL    POLY
+ 875:     -	04BB' 71D5    	        DEFW    0D571H          ;b(8)
+ 876:     -	04BD' 784C    	        DEFW    4C78H
+ 877:     -	04BF' 70      	        DEFB    70H
+ 878:     -	04C0' AF94    	        DEFW    94AFH           ;b(6)
+ 879:     -	04C2' 03B6    	        DEFW    0B603H
+ 880:     -	04C4' 76      	        DEFB    76H
+ 881:     -	04C5' C89C    	        DEFW    9CC8H           ;b(4)
+ 882:     -	04C7' AA2A    	        DEFW    2AAAH
+ 883:     -	04C9' 7B      	        DEFB    7BH
+ 884:     -	04CA' DDFF    	        DEFW    0FFDDH          ;b(2)
+ 885:     -	04CC' FFFF    	        DEFW    0FFFFH
+ 886:     -	04CE' 7E      	        DEFB    7EH
+ 887:     -	04CF' 0000    	        DEFW    0               ;b(0)
+ 888:     -	04D1' 0000    	        DEFW    0
+ 889:     -	04D3' 80      	        DEFB    80H
+ 890: 5186+17	04D4' CDA00A  	        CALL    POP5
+ 891: 5203+10	04D7' F1      	SIN3:   POP     AF
+ 892: 5213+7	04D8' E604    	        AND     4
+ 893: 5220+5+6	04DA' C8      	        RET     Z
+ 894: 5225+4	04DB' 0D      	        DEC     C
+ 895: 5229+4	04DC' 0C      	        INC     C
+ 896: 5233+5+6	04DD' C8      	        RET     Z               ;ZERO
+ 897: 5238+8	04DE' CBFC    	        SET     7,H             ;MAKE NEGATIVE
+ 898: 5246+10	04E0' C9      	        RET
+ 899:				;
+ 900:				;Floating-point one:
+ 901:				;
+ 902: 5256+10	04E1' 210000  	FONE:   LD      HL,0
+ 903: 5266+4	04E4' D9      	        EXX
+ 904: 5270+10	04E5' 210000  	        LD      HL,0
+ 905: 5280+4	04E8' D9      	        EXX
+ 906: 5284+7	04E9' 0E80    	        LD      C,80H
+ 907: 5291+10	04EB' C9      	        RET
+ 908:				;
+ 909: 5301+10	04EC' 110000  	DONE:   LD      DE,0
+ 910: 5311+4	04EF' D9      	        EXX
+ 911: 5315+10	04F0' 110000  	        LD      DE,0
+ 912: 5325+4	04F3' D9      	        EXX
+ 913: 5329+7	04F4' 0680    	        LD      B,80H
+ 914: 5336+10	04F6' C9      	        RET
+ 915:				;
+ 916: 5346+10	04F7' 110F49  	PIBY4:  LD      DE,490FH
+ 917: 5356+4	04FA' D9      	        EXX
+ 918: 5360+10	04FB' 11A2DA  	        LD      DE,0DAA2H
+ 919: 5370+4	04FE' D9      	        EXX
+ 920: 5374+7	04FF' 067F    	        LD      B,7FH
+ 921: 5381+10	0501' C9      	        RET
+ 922:				;
+ 923:				;EXP - Exponential function
+ 924:				;Result is floating-point numeric.
+ 925:				;
+ 926: 5391+17	0502' CDAE09  	EXP:    CALL    SFLOAT
+ 927: 5408+17	0505' CD8205  	EXP0:   CALL    LN2             ;LN(2)
+ 928: 5425+4	0508' D9      	        EXX
+ 929: 5429+4	0509' 1D      	        DEC     E
+ 930: 5433+10	050A' 01CFD1  	        LD      BC,0D1CFH       ;0.6931471805599453
+ 931: 5443+4	050D' D9      	        EXX
+ 932: 5447+11	050E' E5      	        PUSH    HL              ;H7=SIGN
+ 933: 5458+17	050F' CD3309  	        CALL    MOD48           ;"MODULUS"
+ 934: 5475+10	0512' F1      	        POP     AF
+ 935: 5485+8	0513' CB7B    	        BIT     7,E
+ 936: 5493+7+5	0515' 2809    	        JR      Z,EXP1
+ 937: 5500+4	0517' 17      	        RLA
+ 938: 5504+10	0518' DA1D0A  	        JP      C,ZERO
+ 939: 5514+7	051B' 3E18    	        LD      A,EXPRNG
+ 940: 5521+10	051D' C31100  	        JP      ERROR           ;"Exp range"
+ 941:				;
+ 942: 5531+7	0520' E680    	EXP1:   AND     80H
+ 943: 5538+4	0522' B3      	        OR      E
+ 944: 5542+11	0523' F5      	        PUSH    AF              ;INTEGER PART
+ 945: 5553+8	0524' CBBC    	        RES     7,H
+ 946: 5561+17	0526' CD970A  	        CALL    PUSH5           ;PUSH X*LN(2)
+ 947: 5578+17	0529' CDCA0A  	        CALL    POLY
+ 948:     -	052C' 7240    	        DEFW    4072H           ;a(7)
+ 949:     -	052E' 2E94    	        DEFW    942EH
+ 950:     -	0530' 73      	        DEFB    73H
+ 951:     -	0531' 656F    	        DEFW    6F65H           ;a(6)
+ 952:     -	0533' 4F2E    	        DEFW    2E4FH
+ 953:     -	0535' 76      	        DEFB    76H
+ 954:     -	0536' 376D    	        DEFW    6D37H           ;a(5)
+ 955:     -	0538' 0288    	        DEFW    8802H
+ 956:     -	053A' 79      	        DEFB    79H
+ 957:     -	053B' 12E5    	        DEFW    0E512H          ;a(4)
+ 958:     -	053D' A02A    	        DEFW    2AA0H
+ 959:     -	053F' 7B      	        DEFB    7BH
+ 960:     -	0540' 144F    	        DEFW    4F14H           ;a(3)
+ 961:     -	0542' AAAA    	        DEFW    0AAAAH
+ 962:     -	0544' 7D      	        DEFB    7DH
+ 963:     -	0545' 56FD    	        DEFW    0FD56H          ;a(2)
+ 964:     -	0547' FF7F    	        DEFW    7FFFH
+ 965:     -	0549' 7E      	        DEFB    7EH
+ 966:     -	054A' FEFF    	        DEFW    0FFFEH          ;a(1)
+ 967:     -	054C' FFFF    	        DEFW    0FFFFH
+ 968:     -	054E' 7F      	        DEFB    7FH
+ 969:     -	054F' 0000    	        DEFW    0               ;a(0)
+ 970:     -	0551' 0000    	        DEFW    0
+ 971:     -	0553' 80      	        DEFB    80H
+ 972: 5595+17	0554' CDA00A  	        CALL    POP5
+ 973: 5612+10	0557' F1      	        POP     AF
+ 974: 5622+11	0558' F5      	        PUSH    AF
+ 975: 5633+10+7	0559' F47905  	        CALL    P,RECIP         ;X=1/X
+ 976: 5643+10	055C' F1      	        POP     AF
+ 977: 5653+10	055D' F26405  	        JP      P,EXP4
+ 978: 5663+7	0560' E67F    	        AND     7FH
+ 979: 5670+8	0562' ED44    	        NEG
+ 980: 5678+7	0564' C680    	EXP4:   ADD     A,80H
+ 981: 5685+4	0566' 81      	        ADD     A,C
+ 982: 5689+7+5	0567' 3805    	        JR      C,EXP2
+ 983: 5696+10	0569' F21D0A  	        JP      P,ZERO          ;UNDERFLOW
+ 984: 5706+12	056C' 1803    	        JR      EXP3
+ 985: 5718+10	056E' FAEE09  	EXP2:   JP      M,OFLOW         ;OVERFLOW
+ 986: 5728+7	0571' C680    	EXP3:   ADD     A,80H
+ 987: 5735+10	0573' CA1D0A  	        JP      Z,ZERO
+ 988: 5745+4	0576' 4F      	        LD      C,A
+ 989: 5749+4	0577' AF      	        XOR     A               ;NUMERIC MARKER
+ 990: 5753+10	0578' C9      	        RET
+ 991:				;
+ 992: 5763+17	0579' CDEC04  	RECIP:  CALL    DONE
+ 993: 5780+17	057C' CDD809  	RDIV:   CALL    SWAP
+ 994: 5797+10	057F' C39601  	        JP      FDIV            ;RECIPROCAL
+ 995:				;
+ 996: 5807+10	0582' 117231  	LN2:    LD      DE,3172H        ;LN(2)
+ 997: 5817+4	0585' D9      	        EXX
+ 998: 5821+10	0586' 11F817  	        LD      DE,17F8H
+ 999: 5831+4	0589' D9      	        EXX
+1000: 5835+7	058A' 067F    	        LD      B,7FH
+1001: 5842+10	058C' C9      	        RET
+1002:				;
+1003:				;LN - Natural log.
+1004:				;Result is floating-point numeric.
+1005:				;
+1006: 5852+17	058D' CDAE09  	LN:     CALL    SFLOAT
+1007: 5869+7	0590' 3E16    	LN0:    LD      A,LOGRNG
+1008: 5876+8	0592' CB7C    	        BIT     7,H
+1009: 5884+10	0594' C21100  	        JP      NZ,ERROR        ;"Log range"
+1010: 5894+4	0597' 0C      	        INC     C
+1011: 5898+4	0598' 0D      	        DEC     C
+1012: 5902+10	0599' CA1100  	        JP      Z,ERROR
+1013: 5912+10	059C' 110435  	        LD      DE,3504H        ;SQR(2)
+1014: 5922+4	059F' D9      	        EXX
+1015: 5926+10	05A0' 1133F3  	        LD      DE,0F333H       ;1.41421356237
+1016: 5936+4	05A3' D9      	        EXX
+1017: 5940+17	05A4' CD2F0A  	        CALL    ICP0            ;MANTISSA>SQR(2)?
+1018: 5957+4	05A7' 79      	        LD      A,C             ;EXPONENT
+1019: 5961+7	05A8' 0E80    	        LD      C,80H           ;1 <= X < 2
+1020: 5968+7+5	05AA' 3802    	        JR      C,LN4
+1021: 5975+4	05AC' 0D      	        DEC     C
+1022: 5979+4	05AD' 3C      	        INC     A
+1023: 5983+11	05AE' F5      	LN4:    PUSH    AF              ;SAVE EXPONENT
+1024: 5994+17	05AF' CDAC0A  	        CALL    RATIO           ;X=(X-1)/(X+1)
+1025: 6011+17	05B2' CD970A  	        CALL    PUSH5
+1026: 6028+17	05B5' CD910A  	        CALL    SQUARE          ;PUSH X*X
+1027: 6045+17	05B8' CDCA0A  	        CALL    POLY
+1028:     -	05BB' 48CC    	        DEFW    0CC48H          ;a(9)
+1029:     -	05BD' FB74    	        DEFW    74FBH
+1030:     -	05BF' 7D      	        DEFB    7DH
+1031:     -	05C0' AFAE    	        DEFW    0AEAFH          ;a(7)
+1032:     -	05C2' FF11    	        DEFW    11FFH
+1033:     -	05C4' 7E      	        DEFB    7EH
+1034:     -	05C5' 8CD9    	        DEFW    0D98CH          ;a(5)
+1035:     -	05C7' CD4C    	        DEFW    4CCDH
+1036:     -	05C9' 7E      	        DEFB    7EH
+1037:     -	05CA' E3A9    	        DEFW    0A9E3H          ;a(3)
+1038:     -	05CC' AA2A    	        DEFW    2AAAH
+1039:     -	05CE' 7F      	        DEFB    7FH
+1040:     -	05CF' 0000    	        DEFW    0               ;a(1)
+1041:     -	05D1' 0000    	        DEFW    0
+1042:     -	05D3' 81      	        DEFB    81H
+1043: 6062+17	05D4' CDA00A  	        CALL    POP5
+1044: 6079+17	05D7' CDA00A  	        CALL    POP5
+1045: 6096+17	05DA' CD2902  	        CALL    FMUL
+1046: 6113+10	05DD' F1      	        POP     AF              ;EXPONENT
+1047: 6123+17	05DE' CD970A  	        CALL    PUSH5
+1048: 6140+4	05E1' 08      	        EX      AF,AF'
+1049: 6144+17	05E2' CD1D0A  	        CALL    ZERO
+1050: 6161+4	05E5' 08      	        EX      AF,AF'
+1051: 6165+7	05E6' D680    	        SUB     80H
+1052: 6172+7+5	05E8' 281B    	        JR      Z,LN3
+1053: 6179+7+5	05EA' 3002    	        JR      NC,LN1
+1054: 6186+4	05EC' 2F      	        CPL
+1055: 6190+4	05ED' 3C      	        INC     A
+1056: 6194+4	05EE' 67      	LN1:    LD      H,A
+1057: 6198+7	05EF' 0E87    	        LD      C,87H
+1058: 6205+11	05F1' F5      	        PUSH    AF
+1059: 6216+17	05F2' CD9409  	        CALL    FLOAT
+1060: 6233+8	05F5' CBBC    	        RES     7,H
+1061: 6241+17	05F7' CD8205  	        CALL    LN2
+1062: 6258+17	05FA' CD2902  	        CALL    FMUL
+1063: 6275+10	05FD' F1      	        POP     AF
+1064: 6285+7+5	05FE' 3005    	        JR      NC,LN3
+1065: 6292+10	0600' FA0506  	        JP      M,LN3
+1066: 6302+8	0603' CBFC    	        SET     7,H
+1067: 6310+17	0605' CDA00A  	LN3:    CALL    POP5
+1068: 6327+17	0608' CD3E01  	        CALL    FADD
+1069: 6344+4	060B' AF      	        XOR     A
+1070: 6348+10	060C' C9      	        RET
+1071:				;
+1072:				;LOG - base-10 logarithm.
+1073:				;Result is floating-point numeric.
+1074:				;
+1075: 6358+17	060D' CD8D05  	LOG:    CALL    LN
+1076: 6375+10	0610' 115B5E  	        LD      DE,5E5BH        ;LOG(e)
+1077: 6385+4	0613' D9      	        EXX
+1078: 6389+10	0614' 11A9D8  	        LD      DE,0D8A9H
+1079: 6399+4	0617' D9      	        EXX
+1080: 6403+7	0618' 067E    	        LD      B,7EH
+1081: 6410+17	061A' CD2902  	        CALL    FMUL
+1082: 6427+4	061D' AF      	        XOR     A
+1083: 6431+10	061E' C9      	        RET
+1084:				;
+1085:				;ASN - Arc-sine
+1086:				;Result is floating-point numeric.
+1087:				;
+1088: 6441+17	061F' CDAE09  	ASN:    CALL    SFLOAT
+1089: 6458+17	0622' CD970A  	        CALL    PUSH5
+1090: 6475+17	0625' CD890A  	        CALL    COPY
+1091: 6492+17	0628' CD2902  	        CALL    FMUL
+1092: 6509+17	062B' CDEC04  	        CALL    DONE
+1093: 6526+17	062E' CD2E01  	        CALL    RSUB
+1094: 6543+17	0631' CDF003  	        CALL    SQR0
+1095: 6560+17	0634' CDA00A  	        CALL    POP5
+1096: 6577+4	0637' 0C      	        INC     C
+1097: 6581+4	0638' 0D      	        DEC     C
+1098: 6585+7	0639' 3E02    	        LD      A,2
+1099: 6592+11	063B' D5      	        PUSH    DE
+1100: 6603+7+5	063C' 2870    	        JR      Z,ACS1
+1101: 6610+10	063E' D1      	        POP     DE
+1102: 6620+17	063F' CD7C05  	        CALL    RDIV
+1103: 6637+12	0642' 1803    	        JR      ATN0
+1104:				;
+1105:				;ATN - arc-tangent
+1106:				;Result is floating-point numeric.
+1107:				;
+1108: 6649+17	0644' CDAE09  	ATN:    CALL    SFLOAT
+1109: 6666+11	0647' E5      	ATN0:   PUSH    HL              ;SAVE SIGN
+1110: 6677+8	0648' CBBC    	        RES     7,H
+1111: 6685+10	064A' 111354  	        LD      DE,5413H        ;TAN(PI/8)=SQR(2)-1
+1112: 6695+4	064D' D9      	        EXX
+1113: 6699+10	064E' 11D0CC  	        LD      DE,0CCD0H
+1114: 6709+4	0651' D9      	        EXX
+1115: 6713+7	0652' 067E    	        LD      B,7EH
+1116: 6720+17	0654' CD2C0A  	        CALL    FCP0            ;COMPARE
+1117: 6737+7	0657' 0600    	        LD      B,0
+1118: 6744+7+5	0659' 381C    	        JR      C,ATN2
+1119: 6751+10	065B' 11821A  	        LD      DE,1A82H        ;TAN(3*PI/8)=SQR(2)+1
+1120: 6761+4	065E' D9      	        EXX
+1121: 6765+10	065F' 119A79  	        LD      DE,799AH
+1122: 6775+4	0662' D9      	        EXX
+1123: 6779+7	0663' 0681    	        LD      B,81H
+1124: 6786+17	0665' CD2C0A  	        CALL    FCP0            ;COMPARE
+1125: 6803+7+5	0668' 3808    	        JR      C,ATN1
+1126: 6810+17	066A' CD7905  	        CALL    RECIP           ;X=1/X
+1127: 6827+7	066D' 0602    	        LD      B,2
+1128: 6834+10	066F' C37706  	        JP      ATN2
+1129: 6844+17	0672' CDAC0A  	ATN1:   CALL    RATIO           ;X=(X-1)/(X+1)
+1130: 6861+7	0675' 0601    	        LD      B,1
+1131: 6868+11	0677' C5      	ATN2:   PUSH    BC              ;SAVE FLAG
+1132: 6879+17	0678' CD970A  	        CALL    PUSH5
+1133: 6896+17	067B' CD910A  	        CALL    SQUARE          ;PUSH X*X
+1134: 6913+17	067E' CDCA0A  	        CALL    POLY
+1135:     -	0681' 35F3    	        DEFW    0F335H          ;a(13)
+1136:     -	0683' D837    	        DEFW    37D8H
+1137:     -	0685' 7B      	        DEFB    7BH
+1138:     -	0686' 916B    	        DEFW    6B91H           ;a(11)
+1139:     -	0688' B9AA    	        DEFW    0AAB9H
+1140:     -	068A' 7C      	        DEFB    7CH
+1141:     -	068B' DE41    	        DEFW    41DEH           ;a(9)
+1142:     -	068D' 9761    	        DEFW    6197H
+1143:     -	068F' 7C      	        DEFB    7CH
+1144:     -	0690' 7B9D    	        DEFW    9D7BH           ;a(7)
+1145:     -	0692' 3792    	        DEFW    9237H
+1146:     -	0694' 7D      	        DEFB    7DH
+1147:     -	0695' 5A2A    	        DEFW    2A5AH           ;a(5)
+1148:     -	0697' CC4C    	        DEFW    4CCCH
+1149:     -	0699' 7D      	        DEFB    7DH
+1150:     -	069A' 5CA9    	        DEFW    0A95CH          ;a(3)
+1151:     -	069C' AAAA    	        DEFW    0AAAAH
+1152:     -	069E' 7E      	        DEFB    7EH
+1153:     -	069F' 0000    	        DEFW    0               ;a(1)
+1154:     -	06A1' 0000    	        DEFW    0
+1155:     -	06A3' 80      	        DEFB    80H
+1156: 6930+17	06A4' CDA00A  	        CALL    POP5
+1157: 6947+17	06A7' CDA00A  	        CALL    POP5
+1158: 6964+17	06AA' CD2902  	        CALL    FMUL
+1159: 6981+10	06AD' F1      	        POP     AF
+1160: 6991+17	06AE' CDF704  	ACS1:   CALL    PIBY4           ;PI/4
+1161: 7008+4	06B1' 1F      	        RRA
+1162: 7012+11	06B2' F5      	        PUSH    AF
+1163: 7023+10+7	06B3' DC3E01  	        CALL    C,FADD
+1164: 7033+10	06B6' F1      	        POP     AF
+1165: 7043+4	06B7' 04      	        INC     B
+1166: 7047+4	06B8' 1F      	        RRA
+1167: 7051+10+7	06B9' DC2E01  	        CALL    C,RSUB
+1168: 7061+10	06BC' F1      	        POP     AF
+1169: 7071+4	06BD' B7      	        OR      A
+1170: 7075+5+6	06BE' F0      	        RET     P
+1171: 7080+8	06BF' CBFC    	        SET     7,H             ;MAKE NEGATIVE
+1172: 7088+4	06C1' AF      	        XOR     A
+1173: 7092+10	06C2' C9      	        RET
+1174:				;
+1175:				;ACS - Arc cosine=PI/2-ASN.
+1176:				;Result is floating point numeric.
+1177:				;
+1178: 7102+17	06C3' CD1F06  	ACS:    CALL    ASN
+1179: 7119+7	06C6' 3E02    	        LD      A,2
+1180: 7126+11	06C8' F5      	        PUSH    AF
+1181: 7137+12	06C9' 18E3    	        JR      ACS1
+1182:				;
+1183:				;Function STR - convert numeric value to ASCII string.
+1184:				;   Inputs: HLH'L'C = integer or floating-point number
+1185:				;           DE = address at which to store string
+1186:				;           IX = address of @% format control
+1187:				;  Outputs: String stored, with NUL terminator
+1188:				;
+1189:				;First normalise for decimal output:
+1190:				;
+1191: 7149+17	06CB' CDAE09  	STR:    CALL    SFLOAT
+1192: 7166+7	06CE' 0600    	        LD      B,0             ;DEFAULT PT. POSITION
+1193: 7173+8	06D0' CB7C    	        BIT     7,H             ;NEGATIVE?
+1194: 7181+7+5	06D2' 2806    	        JR      Z,STR10
+1195: 7188+8	06D4' CBBC    	        RES     7,H
+1196: 7196+7	06D6' 3E2D    	        LD      A,'-'
+1197: 7203+7	06D8' 12      	        LD      (DE),A          ;STORE SIGN
+1198: 7210+6	06D9' 13      	        INC     DE
+1199: 7216+4	06DA' AF      	STR10:  XOR     A               ;CLEAR A
+1200: 7220+4	06DB' B9      	        CP      C
+1201: 7224+7+5	06DC' 2847    	        JR      Z,STR2          ;ZERO
+1202: 7231+11	06DE' D5      	        PUSH    DE              ;SAVE TEXT POINTER
+1203: 7242+4	06DF' 78      	        LD      A,B
+1204: 7246+11	06E0' F5      	STR11:  PUSH    AF              ;SAVE DECIMAL COUNTER
+1205: 7257+4	06E1' 79      	        LD      A,C             ;BINARY EXPONENT
+1206: 7261+7	06E2' FEA1    	        CP      161
+1207: 7268+7+5	06E4' 301A    	        JR      NC,STR14
+1208: 7275+7	06E6' FE9B    	        CP      155
+1209: 7282+7+5	06E8' 3025    	        JR      NC,STR15
+1210: 7289+4	06EA' 2F      	        CPL
+1211: 7293+7	06EB' FEE1    	        CP      225
+1212: 7300+7+5	06ED' 3802    	        JR      C,STR13
+1213: 7307+7	06EF' 3EF8    	        LD      A,-8
+1214: 7314+7	06F1' C61C    	STR13:  ADD     A,28
+1215: 7321+17	06F3' CDF10A  	        CALL    POWR10
+1216: 7338+11	06F6' F5      	        PUSH    AF
+1217: 7349+17	06F7' CD2902  	        CALL    FMUL
+1218: 7366+10	06FA' F1      	        POP     AF
+1219: 7376+4	06FB' 47      	        LD      B,A
+1220: 7380+10	06FC' F1      	        POP     AF
+1221: 7390+4	06FD' 90      	        SUB     B
+1222: 7394+12	06FE' 18E0    	        JR      STR11
+1223: 7406+7	0700' D620    	STR14:  SUB     32
+1224: 7413+17	0702' CDF10A  	        CALL    POWR10
+1225: 7430+11	0705' F5      	        PUSH    AF
+1226: 7441+17	0706' CD9601  	        CALL    FDIV
+1227: 7458+10	0709' F1      	        POP     AF
+1228: 7468+4	070A' 47      	        LD      B,A
+1229: 7472+10	070B' F1      	        POP     AF
+1230: 7482+4	070C' 80      	        ADD     A,B
+1231: 7486+12	070D' 18D1    	        JR      STR11
+1232: 7498+7	070F' 3E09    	STR15:  LD      A,9
+1233: 7505+17	0711' CDF10A  	        CALL    POWR10          ;10^9
+1234: 7522+17	0714' CD2C0A  	        CALL    FCP0
+1235: 7539+4	0717' 79      	        LD      A,C
+1236: 7543+10	0718' C1      	        POP     BC
+1237: 7553+4	0719' 4F      	        LD      C,A
+1238: 7557+8	071A' CBFC    	        SET     7,H             ;IMPLIED 1
+1239: 7565+10+7	071C' DC4E0A  	        CALL    C,X10B          ;X10, DEC B
+1240: 7575+10	071F' D1      	        POP     DE              ;RESTORE TEXT POINTER
+1241: 7585+8	0720' CBB9    	        RES     7,C
+1242: 7593+7	0722' 3E00    	        LD      A,0
+1243: 7600+4	0724' 17      	        RLA                     ;PUT CARRY IN LSB
+1244:				;
+1245:				;At this point decimal normalisation has been done,
+1246:				;now convert to decimal digits:
+1247:				;      AHLH'L' = number in normalised integer form
+1248:				;            B = decimal place adjustment
+1249:				;            C = binary place adjustment (29-33)
+1250:				;
+1251: 7604+4	0725' 0C      	STR2:   INC     C
+1252: 7608+4	0726' 08      	        EX      AF,AF'          ;SAVE A
+1253: 7612+4	0727' 78      	        LD      A,B
+1254: 7616+20	0728' DDCB024E	        BIT     1,(IX+2)
+1255: 7636+7+5	072C' 2008    	        JR      NZ,STR20
+1256: 7643+4	072E' AF      	        XOR     A
+1257: 7647+19	072F' DDBE01  	        CP      (IX+1)
+1258: 7666+7+5	0732' 280A    	        JR      Z,STR21
+1259: 7673+7	0734' 3EF6    	        LD      A,-10
+1260: 7680+19	0736' DD8601  	STR20:  ADD     A,(IX+1)        ;SIG. FIG. COUNT
+1261: 7699+4	0739' B7      	        OR      A               ;CLEAR CARRY
+1262: 7703+10	073A' FA3E07  	        JP      M,STR21
+1263: 7713+4	073D' AF      	        XOR     A
+1264: 7717+11	073E' F5      	STR21:  PUSH    AF
+1265: 7728+4	073F' 08      	        EX      AF,AF'          ;RESTORE A
+1266: 7732+17	0740' CD770A  	STR22:  CALL    X2              ;RL AHLH'L'
+1267: 7749+4	0743' 8F      	        ADC     A,A
+1268: 7753+7	0744' FE0A    	        CP      10
+1269: 7760+7+5	0746' 3805    	        JR      C,STR23
+1270: 7767+7	0748' D60A    	        SUB     10
+1271: 7774+4	074A' D9      	        EXX
+1272: 7778+4	074B' 2C      	        INC     L               ;SET RESULT BIT
+1273: 7782+4	074C' D9      	        EXX
+1274: 7786+4	074D' 0D      	STR23:  DEC     C
+1275: 7790+7+5	074E' 20F0    	        JR      NZ,STR22        ;32 TIMES
+1276: 7797+4	0750' 4F      	        LD      C,A             ;REMAINDER
+1277: 7801+4	0751' 7C      	        LD      A,H
+1278: 7805+7	0752' E63F    	        AND     3FH             ;CLEAR OUT JUNK
+1279: 7812+4	0754' 67      	        LD      H,A
+1280: 7816+10	0755' F1      	        POP     AF
+1281: 7826+10	0756' F26307  	        JP      P,STR24
+1282: 7836+4	0759' 3C      	        INC     A
+1283: 7840+7+5	075A' 201C    	        JR      NZ,STR26
+1284: 7847+7	075C' 3E04    	        LD      A,4
+1285: 7854+4	075E' B9      	        CP      C               ;ROUND UP?
+1286: 7858+7	075F' 3E00    	        LD      A,0
+1287: 7865+12	0761' 1815    	        JR      STR26
+1288: 7877+11	0763' F5      	STR24:  PUSH    AF
+1289: 7888+4	0764' 79      	        LD      A,C
+1290: 7892+7	0765' CE30    	        ADC     A,'0'           ;ADD CARRY
+1291: 7899+7	0767' FE30    	        CP      '0'
+1292: 7906+7+5	0769' 2805    	        JR      Z,STR25         ;SUPPRESS ZERO
+1293: 7913+7	076B' FE3A    	        CP      '9'+1
+1294: 7920+4	076D' 3F      	        CCF
+1295: 7924+7+5	076E' 3008    	        JR      NC,STR26
+1296: 7931+19	0770' E3      	STR25:  EX      (SP),HL
+1297: 7950+8	0771' CB75    	        BIT     6,L             ;ZERO FLAG
+1298: 7958+19	0773' E3      	        EX      (SP),HL
+1299: 7977+7+5	0774' 2005    	        JR      NZ,STR27
+1300: 7984+7	0776' 3E30    	        LD      A,'0'
+1301: 7991+4	0778' 3C      	STR26:  INC     A               ;SET +VE
+1302: 7995+4	0779' 3D      	        DEC     A
+1303: 7999+11	077A' F5      	        PUSH    AF              ;PUT ON STACK + CARRY
+1304: 8010+4	077B' 04      	STR27:  INC     B
+1305: 8014+17	077C' CDFD09  	        CALL    TEST            ;IS HLH'L' ZERO?
+1306: 8031+7	077F' 0E20    	        LD      C,32
+1307: 8038+7	0781' 3E00    	        LD      A,0
+1308: 8045+7+5	0783' 20BB    	        JR      NZ,STR22
+1309: 8052+10	0785' F1      	        POP     AF
+1310: 8062+11	0786' F5      	        PUSH    AF
+1311: 8073+7	0787' 3E00    	        LD      A,0
+1312: 8080+7+5	0789' 38B5    	        JR      C,STR22
+1313:				;
+1314:				;At this point, the decimal character string is stored
+1315:				; on the stack. Trailing zeroes are suppressed and may
+1316:				; need to be replaced.
+1317:				;B register holds decimal point position.
+1318:				;Now format number and store as ASCII string:
+1319:				;
+1320: 8087+4	078B' EB      	STR3:   EX      DE,HL           ;STRING POINTER
+1321: 8091+7	078C' 0EFF    	        LD      C,-1            ;FLAG "E"
+1322: 8098+7	078E' 1601    	        LD      D,1
+1323: 8105+19	0790' DD5E01  	        LD      E,(IX+1)        ;f2
+1324: 8124+20	0793' DDCB0246	        BIT     0,(IX+2)
+1325: 8144+7+5	0797' 2032    	        JR      NZ,STR34        ;E MODE
+1326: 8151+20	0799' DDCB024E	        BIT     1,(IX+2)
+1327: 8171+7+5	079D' 2811    	        JR      Z,STR31
+1328: 8178+4	079F' 78      	        LD      A,B             ;F MODE
+1329: 8182+4	07A0' B7      	        OR      A
+1330: 8186+7+5	07A1' 2804    	        JR      Z,STR30
+1331: 8193+10	07A3' FAA707  	        JP      M,STR30
+1332: 8203+4	07A6' 50      	        LD      D,B
+1333: 8207+4	07A7' 7A      	STR30:  LD      A,D
+1334: 8211+19	07A8' DD8601  	        ADD     A,(IX+1)
+1335: 8230+4	07AB' 5F      	        LD      E,A
+1336: 8234+7	07AC' FE0B    	        CP      11
+1337: 8241+7+5	07AE' 3817    	        JR      C,STR32
+1338: 8248+4	07B0' 78      	STR31:  LD      A,B             ;G MODE
+1339: 8252+10	07B1' 110101  	        LD      DE,101H
+1340: 8262+4	07B4' B7      	        OR      A
+1341: 8266+10	07B5' FACB07  	        JP      M,STR34
+1342: 8276+7+5	07B8' 280D    	        JR      Z,STR32
+1343: 8283+19	07BA' DD7E01  	        LD      A,(IX+1)
+1344: 8302+4	07BD' B7      	        OR      A
+1345: 8306+7+5	07BE' 2002    	        JR      NZ,STR3A
+1346: 8313+7	07C0' 3E0A    	        LD      A,10
+1347: 8320+4	07C2' B8      	STR3A:  CP      B
+1348: 8324+7+5	07C3' 3806    	        JR      C,STR34
+1349: 8331+4	07C5' 50      	        LD      D,B
+1350: 8335+4	07C6' 58      	        LD      E,B
+1351: 8339+4	07C7' 78      	STR32:  LD      A,B
+1352: 8343+7	07C8' C681    	        ADD     A,129
+1353: 8350+4	07CA' 4F      	        LD      C,A
+1354: 8354+8	07CB' CBFA    	STR34:  SET     7,D
+1355: 8362+4	07CD' 1D      	        DEC     E
+1356: 8366+4	07CE' 7A      	STR35:  LD      A,D
+1357: 8370+4	07CF' B9      	        CP      C
+1358: 8374+7+5	07D0' 300C    	        JR      NC,STR33
+1359: 8381+10	07D2' F1      	STR36:  POP     AF
+1360: 8391+7+5	07D3' 2803    	        JR      Z,STR37
+1361: 8398+10	07D5' F2E007  	        JP      P,STR38
+1362: 8408+11	07D8' F5      	STR37:  PUSH    AF
+1363: 8419+4	07D9' 1C      	        INC     E
+1364: 8423+4	07DA' 1D      	        DEC     E
+1365: 8427+10	07DB' FAEF07  	        JP      M,STR4
+1366: 8437+7	07DE' 3E30    	STR33:  LD      A,'0'
+1367: 8444+4	07E0' 15      	STR38:  DEC     D
+1368: 8448+10	07E1' E2E707  	        JP      PO,STR39
+1369: 8458+10	07E4' 362E    	        LD      (HL),'.'
+1370: 8468+6	07E6' 23      	        INC     HL
+1371: 8474+7	07E7' 77      	STR39:  LD      (HL),A
+1372: 8481+6	07E8' 23      	        INC     HL
+1373: 8487+4	07E9' 1D      	        DEC     E
+1374: 8491+10	07EA' F2CE07  	        JP      P,STR35
+1375: 8501+12	07ED' 18E3    	        JR      STR36
+1376:				;
+1377: 8513+10	07EF' F1      	STR4:   POP     AF
+1378: 8523+4	07F0' 0C      	STR40:  INC     C
+1379: 8527+4	07F1' 4D      	        LD      C,L
+1380: 8531+7+5	07F2' 2027    	        JR      NZ,STR44
+1381: 8538+10	07F4' 3645    	        LD      (HL),'E'        ;EXPONENT
+1382: 8548+6	07F6' 23      	        INC     HL
+1383: 8554+4	07F7' 78      	        LD      A,B
+1384: 8558+4	07F8' 3D      	        DEC     A
+1385: 8562+10	07F9' F20108  	        JP      P,STR41
+1386: 8572+10	07FC' 362D    	        LD      (HL),'-'
+1387: 8582+6	07FE' 23      	        INC     HL
+1388: 8588+8	07FF' ED44    	        NEG
+1389: 8596+10	0801' 3630    	STR41:  LD      (HL),'0'
+1390: 8606+7+5	0803' 2815    	        JR      Z,STR47
+1391: 8613+7	0805' FE0A    	        CP      10
+1392: 8620+4	0807' 47      	        LD      B,A
+1393: 8624+7	0808' 3E3A    	        LD      A,':'
+1394: 8631+7+5	080A' 3803    	        JR      C,STR42
+1395: 8638+6	080C' 23      	        INC     HL
+1396: 8644+10	080D' 3630    	        LD      (HL),'0'
+1397: 8654+11	080F' 34      	STR42:  INC     (HL)
+1398: 8665+7	0810' BE      	        CP      (HL)
+1399: 8672+7+5	0811' 2005    	        JR      NZ,STR43
+1400: 8679+10	0813' 3630    	        LD      (HL),'0'
+1401: 8689+6	0815' 2B      	        DEC     HL
+1402: 8695+11	0816' 34      	        INC     (HL)
+1403: 8706+6	0817' 23      	        INC     HL
+1404: 8712+8+5	0818' 10F5    	STR43:  DJNZ    STR42
+1405: 8720+6	081A' 23      	STR47:  INC     HL
+1406: 8726+4	081B' EB      	STR44:  EX      DE,HL
+1407: 8730+10	081C' C9      	        RET
+1408:				;
+1410:				;
+1411:				;Support subroutines:
+1412:				;
+1413: 8740+19	081D' DD4604  	DLOAD5: LD      B,(IX+4)
+1414: 8759+4	0820' D9      	        EXX
+1415: 8763+19	0821' DD5E00  	        LD      E,(IX+0)
+1416: 8782+19	0824' DD5601  	        LD      D,(IX+1)
+1417: 8801+4	0827' D9      	        EXX
+1418: 8805+19	0828' DD5E02  	        LD      E,(IX+2)
+1419: 8824+19	082B' DD5603  	        LD      D,(IX+3)
+1420: 8843+10	082E' C9      	        RET
+1421:				;
+1422:				;CON - Get unsigned numeric constant from ASCII string.
+1423:				;   Inputs: ASCII string at (IX).
+1424:				;  Outputs: Variable-type result in HLH'L'C
+1425:				;           IX updated (points to delimiter)
+1426:				;           A7 = 0 (numeric marker)
+1427:				;
+1428: 8853+17	082F' CD1D0A  	CON:    CALL    ZERO            ;INITIALISE TO ZERO
+1429: 8870+7	0832' 0E00    	        LD      C,0             ;TRUNCATION COUNTER
+1430: 8877+17	0834' CDB408  	        CALL    NUMBER          ;GET INTEGER PART
+1431: 8894+7	0837' FE2E    	        CP      '.'
+1432: 8901+7	0839' 0600    	        LD      B,0             ;DECL. PLACE COUNTER
+1433: 8908+10+7	083B' CCB208  	        CALL    Z,NUMBIX        ;GET FRACTION PART
+1434: 8918+7	083E' FE45    	        CP      'E'
+1435: 8925+7	0840' 3E00    	        LD      A,0             ;INITIALISE EXPONENT
+1436: 8932+10+7	0842' CC8308  	        CALL    Z,GETEXP        ;GET EXPONENT
+1437: 8942+8	0845' CB7C    	        BIT     7,H
+1438: 8950+7+5	0847' 2008    	        JR      NZ,CON0         ;INTEGER OVERFLOW
+1439: 8957+4	0849' B7      	        OR      A
+1440: 8961+7+5	084A' 2005    	        JR      NZ,CON0         ;EXPONENT NON-ZERO
+1441: 8968+4	084C' B8      	        CP      B
+1442: 8972+7+5	084D' 2002    	        JR      NZ,CON0         ;DECIMAL POINT
+1443: 8979+4	084F' B9      	        CP      C
+1444: 8983+5+6	0850' C8      	        RET     Z               ;INTEGER
+1445: 8988+4	0851' 90      	CON0:   SUB     B
+1446: 8992+4	0852' 81      	        ADD     A,C
+1447: 8996+7	0853' 0E9F    	        LD      C,159
+1448: 9003+17	0855' CD9409  	        CALL    FLOAT
+1449: 9020+8	0858' CBBC    	        RES     7,H             ;DITCH IMPLIED 1
+1450: 9028+4	085A' B7      	        OR      A
+1451: 9032+5+6	085B' C8      	        RET     Z               ;DONE
+1452: 9037+10	085C' FA6708  	        JP      M,CON2          ;NEGATIVE EXPONENT
+1453: 9047+17	085F' CDF10A  	        CALL    POWR10
+1454: 9064+17	0862' CD2902  	        CALL    FMUL            ;SCALE
+1455: 9081+4	0865' AF      	        XOR     A
+1456: 9085+10	0866' C9      	        RET
+1457: 9095+7	0867' FEDA    	CON2:   CP      -38
+1458: 9102+7+5	0869' 380A    	        JR      C,CON3          ;CAN'T SCALE IN ONE GO
+1459: 9109+8	086B' ED44    	        NEG
+1460: 9117+17	086D' CDF10A  	        CALL    POWR10
+1461: 9134+17	0870' CD9601  	        CALL    FDIV            ;SCALE
+1462: 9151+4	0873' AF      	        XOR     A
+1463: 9155+10	0874' C9      	        RET
+1464: 9165+11	0875' F5      	CON3:   PUSH    AF
+1465: 9176+7	0876' 3E26    	        LD      A,38
+1466: 9183+17	0878' CDF10A  	        CALL    POWR10
+1467: 9200+17	087B' CD9601  	        CALL    FDIV
+1468: 9217+10	087E' F1      	        POP     AF
+1469: 9227+7	087F' C626    	        ADD     A,38
+1470: 9234+12	0881' 18E4    	        JR      CON2
+1471:				;
+1472:				;GETEXP - Get decimal exponent from string
+1473:				;     Inputs: ASCII string at (IX)
+1474:				;             (IX points at 'E')
+1475:				;             A = initial value
+1476:				;    Outputs: A = new exponent
+1477:				;             IX updated.
+1478:				;   Destroys: A,A',IX,F,F'
+1479:				;
+1480: 9246+11	0883' C5      	GETEXP: PUSH    BC              ;SAVE REGISTERS
+1481: 9257+4	0884' 47      	        LD      B,A             ;INITIAL VALUE
+1482: 9261+7	0885' 0E02    	        LD      C,2             ;2 DIGITS MAX
+1483: 9268+10	0887' DD23    	        INC     IX              ;BUMP PAST 'E'
+1484: 9278+17	0889' CDE80B  	        CALL    SIGNQ
+1485: 9295+4	088C' 08      	        EX      AF,AF'          ;SAVE EXPONENT SIGN
+1486: 9299+17	088D' CDDE0B  	GETEX1: CALL    DIGITQ
+1487: 9316+7+5	0890' 3817    	        JR      C,GETEX2
+1488: 9323+4	0892' 78      	        LD      A,B             ;B=B*10
+1489: 9327+4	0893' 87      	        ADD     A,A
+1490: 9331+4	0894' 87      	        ADD     A,A
+1491: 9335+4	0895' 80      	        ADD     A,B
+1492: 9339+4	0896' 87      	        ADD     A,A
+1493: 9343+4	0897' 47      	        LD      B,A
+1494: 9347+19	0898' DD7E00  	        LD      A,(IX)          ;GET BACK DIGIT
+1495: 9366+10	089B' DD23    	        INC     IX
+1496: 9376+7	089D' E60F    	        AND     0FH             ;MASK UNWANTED BITS
+1497: 9383+4	089F' 80      	        ADD     A,B             ;ADD IN DIGIT
+1498: 9387+4	08A0' 47      	        LD      B,A
+1499: 9391+4	08A1' 0D      	        DEC     C
+1500: 9395+10	08A2' F28D08  	        JP      P,GETEX1
+1501: 9405+7	08A5' 0664    	        LD      B,100           ;FORCE OVERFLOW
+1502: 9412+12	08A7' 18E4    	        JR      GETEX1
+1503: 9424+4	08A9' 08      	GETEX2: EX      AF,AF'          ;RESTORE SIGN
+1504: 9428+7	08AA' FE2D    	        CP      '-'
+1505: 9435+4	08AC' 78      	        LD      A,B
+1506: 9439+10	08AD' C1      	        POP     BC              ;RESTORE
+1507: 9449+5+6	08AE' C0      	        RET     NZ
+1508: 9454+8	08AF' ED44    	        NEG                     ;NEGATE EXPONENT
+1509: 9462+10	08B1' C9      	        RET
+1510:				;
+1511:				;NUMBER: Get unsigned integer from string.
+1512:				;    Inputs: string at (IX)
+1513:				;            C = truncated digit count
+1514:				;                (initially zero)
+1515:				;            B = total digit count
+1516:				;            HLH'L' = initial value
+1517:				;   Outputs: HLH'L' = number (binary integer)
+1518:				;            A = delimiter.
+1519:				;            B, C & IX updated
+1520:				;  Destroys: A,B,C,D,E,H,L,B',C',D',E',H',L',IX,F
+1521:				;
+1522: 9472+10	08B2' DD23    	NUMBIX: INC     IX
+1523: 9482+17	08B4' CDDE0B  	NUMBER: CALL    DIGITQ
+1524: 9499+5+6	08B7' D8      	        RET     C
+1525: 9504+4	08B8' 04      	        INC     B               ;INCREMENT DIGIT COUNT
+1526: 9508+10	08B9' DD23    	        INC     IX
+1527: 9518+17	08BB' CD680A  	        CALL    X10             ;*10 & COPY OLD VALUE
+1528: 9535+7+5	08BE' 3813    	        JR      C,NUMB1         ;OVERFLOW
+1529: 9542+4	08C0' 0D      	        DEC     C               ;SEE IF TRUNCATED
+1530: 9546+4	08C1' 0C      	        INC     C
+1531: 9550+7+5	08C2' 200F    	        JR      NZ,NUMB1        ;IMPORTANT!
+1532: 9557+7	08C4' E60F    	        AND     0FH
+1533: 9564+4	08C6' D9      	        EXX
+1534: 9568+7	08C7' 0600    	        LD      B,0
+1535: 9575+4	08C9' 4F      	        LD      C,A
+1536: 9579+11	08CA' 09      	        ADD     HL,BC           ;ADD IN DIGIT
+1537: 9590+4	08CB' D9      	        EXX
+1538: 9594+7+5	08CC' 30E6    	        JR      NC,NUMBER
+1539: 9601+6	08CE' 23      	        INC     HL              ;CARRY
+1540: 9607+4	08CF' 7C      	        LD      A,H
+1541: 9611+4	08D0' B5      	        OR      L
+1542: 9615+7+5	08D1' 20E1    	        JR      NZ,NUMBER
+1543: 9622+4	08D3' 0C      	NUMB1:  INC     C               ;TRUNCATION COUNTER
+1544: 9626+17	08D4' CDDB09  	        CALL    SWAP1           ;RESTORE PREVIOUS VALUE
+1545: 9643+12	08D7' 18DB    	        JR      NUMBER
+1546:				;
+1547:				;FIX - Fix number to specified exponent value.
+1548:				;    Inputs: HLH'L'C = +ve non-zero number (floated)
+1549:				;            A = desired exponent (A>C)
+1550:				;   Outputs: HLH'L'C = fixed number (unsigned)
+1551:				;            fraction shifted into B'C'
+1552:				;            A'F' positive if integer input
+1553:				;  Destroys: C,H,L,A',B',C',H',L',F,F'
+1554:				;
+1555: 9655+4	08D9' 08      	FIX:    EX      AF,AF'
+1556: 9659+4	08DA' AF      	        XOR     A
+1557: 9663+4	08DB' 08      	        EX      AF,AF'
+1558: 9667+8	08DC' CBFC    	        SET     7,H             ;IMPLIED 1
+1559: 9675+17	08DE' CDE009  	FIX1:   CALL    DIV2
+1560: 9692+4	08E1' B9      	        CP      C
+1561: 9696+5+6	08E2' C8      	        RET     Z
+1562: 9701+10	08E3' D2DE08  	        JP      NC,FIX1
+1563: 9711+10	08E6' C3EE09  	        JP      OFLOW
+1564:				;
+1565:				;SFIX - Convert to integer if necessary.
+1566:				;    Input: Variable-type number in HLH'L'C
+1567:				;   Output: Integer in HLH'L', C=0
+1568:				; Destroys: A,C,H,L,A',B',C',H',L',F,F'
+1569:				;
+1570:				;NEGATE - Negate HLH'L'
+1571:				;    Destroys: H,L,H',L',F
+1572:				;
+1573: 9721+17	08E9' CDD809  	FIX2:   CALL    SWAP
+1574: 9738+17	08EC' CDF208  	        CALL    SFIX
+1575: 9755+17	08EF' CDD809  	        CALL    SWAP
+1576: 9772+4	08F2' 0D      	SFIX:   DEC     C
+1577: 9776+4	08F3' 0C      	        INC     C
+1578: 9780+5+6	08F4' C8      	        RET     Z               ;INTEGER/ZERO
+1579: 9785+8	08F5' CB7C    	        BIT     7,H             ;SIGN
+1580: 9793+11	08F7' F5      	        PUSH    AF
+1581: 9804+7	08F8' 3E9F    	        LD      A,159
+1582: 9811+17	08FA' CDD908  	        CALL    FIX
+1583: 9828+10	08FD' F1      	        POP     AF
+1584: 9838+7	08FE' 0E00    	        LD      C,0
+1585: 9845+5+6	0900' C8      	        RET     Z
+1586: 9850+4	0901' B7      	NEGATE: OR      A               ;CLEAR CARRY
+1587: 9854+4	0902' D9      	        EXX
+1588: 9858+11	0903' D5      	NEG0:   PUSH    DE
+1589: 9869+4	0904' EB      	        EX      DE,HL
+1590: 9873+10	0905' 210000  	        LD      HL,0
+1591: 9883+15	0908' ED52    	        SBC     HL,DE
+1592: 9898+10	090A' D1      	        POP     DE
+1593: 9908+4	090B' D9      	        EXX
+1594: 9912+11	090C' D5      	        PUSH    DE
+1595: 9923+4	090D' EB      	        EX      DE,HL
+1596: 9927+10	090E' 210000  	        LD      HL,0
+1597: 9937+15	0911' ED52    	        SBC     HL,DE
+1598: 9952+10	0913' D1      	        POP     DE
+1599: 9962+10	0914' C9      	        RET
+1600:				;
+1601:				;NEG - Negate HLH'L'B'C'
+1602:				;    Also complements A (used in FADD)
+1603:				;    Destroys: A,H,L,B',C',H',L',F
+1604:				;
+1605: 9972+4	0915' D9      	NEG:    EXX
+1606: 9976+4	0916' 2F      	        CPL
+1607: 9980+11	0917' E5      	        PUSH    HL
+1608: 9991+4	0918' B7      	        OR      A               ;CLEAR CARRY
+1609: 9995+10	0919' 210000  	        LD      HL,0
+1610:10005+15	091C' ED42    	        SBC     HL,BC
+1611:10020+4	091E' 44      	        LD      B,H
+1612:10024+4	091F' 4D      	        LD      C,L
+1613:10028+10	0920' E1      	        POP     HL
+1614:10038+12	0921' 18E0    	        JR      NEG0
+1615:				;
+1616:				;SCALE - Trig scaling.
+1617:				;MOD48 - 48-bit floating-point "modulus" (remainder).
+1618:				;   Inputs: HLH'L'C unsigned floating-point dividend
+1619:				;           DED'E'B'C'B unsigned 48-bit FP divisor
+1620:				;  Outputs: HLH'L'C floating point remainder (H7=1)
+1621:				;           E = quotient (bit 7 is sticky)
+1622:				; Destroys: A,B,C,D,E,H,L,B',C',D',E',H',L',IX,F
+1623:				;FLO48 - Float unsigned number (48 bits)
+1624:				;    Input/output in HLH'L'B'C'C
+1625:				;   Destroys: C,H,L,B',C',H',L',F
+1626:				;
+1627:10050+7	0923' 3E96    	SCALE:  LD      A,150
+1628:10057+4	0925' B9      	        CP      C
+1629:10061+7	0926' 3E17    	        LD      A,ACLOST
+1630:10068+10	0928' DA1100  	        JP      C,ERROR         ;"Accuracy lost"
+1631:10078+17	092B' CDF704  	        CALL    PIBY4
+1632:10095+4	092E' D9      	        EXX
+1633:10099+10	092F' 016921  	        LD      BC,2169H        ;3.141592653589793238
+1634:10109+4	0932' D9      	        EXX
+1635:10113+8	0933' CBFA    	MOD48:  SET     7,D             ;IMPLIED 1
+1636:10121+8	0935' CBFC    	        SET     7,H
+1637:10129+4	0937' 79      	        LD      A,C
+1638:10133+7	0938' 0E00    	        LD      C,0             ;INIT QUOTIENT
+1639:10140+14	093A' DD210000	        LD      IX,0
+1640:10154+15	093E' DDE5    	        PUSH    IX              ;PUT ZERO ON STACK
+1641:10169+4	0940' B8      	        CP      B
+1642:10173+7+5	0941' 383A    	        JR      C,MOD485        ;DIVIDEND<DIVISOR
+1643:10180+4	0943' D9      	MOD481: EXX                     ;CARRY=0 HERE
+1644:10184+19	0944' E3      	        EX      (SP),HL
+1645:10203+15	0945' ED42    	        SBC     HL,BC
+1646:10218+19	0947' E3      	        EX      (SP),HL
+1647:10237+15	0948' ED52    	        SBC     HL,DE
+1648:10252+4	094A' D9      	        EXX
+1649:10256+15	094B' ED52    	        SBC     HL,DE
+1650:10271+7+5	094D' 3009    	        JR      NC,MOD482       ;DIVIDEND>=DIVISOR
+1651:10278+4	094F' D9      	        EXX
+1652:10282+19	0950' E3      	        EX      (SP),HL
+1653:10301+11	0951' 09      	        ADD     HL,BC
+1654:10312+19	0952' E3      	        EX      (SP),HL
+1655:10331+15	0953' ED5A    	        ADC     HL,DE
+1656:10346+4	0955' D9      	        EXX
+1657:10350+15	0956' ED5A    	        ADC     HL,DE
+1658:10365+4	0958' 3F      	MOD482: CCF
+1659:10369+8	0959' CB11    	        RL      C               ;QUOTIENT
+1660:10377+7+5	095B' 3002    	        JR      NC,MOD483
+1661:10384+8	095D' CBF9    	        SET     7,C             ;STICKY BIT
+1662:10392+4	095F' 3D      	MOD483: DEC     A
+1663:10396+4	0960' B8      	        CP      B
+1664:10400+7+5	0961' 3819    	        JR      C,MOD484        ;DIVIDEND<DIVISOR
+1665:10407+19	0963' E3      	        EX      (SP),HL
+1666:10426+11	0964' 29      	        ADD     HL,HL           ;DIVIDEND * 2
+1667:10437+19	0965' E3      	        EX      (SP),HL
+1668:10456+4	0966' D9      	        EXX
+1669:10460+15	0967' ED6A    	        ADC     HL,HL
+1670:10475+4	0969' D9      	        EXX
+1671:10479+15	096A' ED6A    	        ADC     HL,HL
+1672:10494+7+5	096C' 30D5    	        JR      NC,MOD481       ;AGAIN
+1673:10501+4	096E' B7      	        OR      A
+1674:10505+4	096F' D9      	        EXX
+1675:10509+19	0970' E3      	        EX      (SP),HL
+1676:10528+15	0971' ED42    	        SBC     HL,BC           ;OVERFLOW, SO SUBTRACT
+1677:10543+19	0973' E3      	        EX      (SP),HL
+1678:10562+15	0974' ED52    	        SBC     HL,DE
+1679:10577+4	0976' D9      	        EXX
+1680:10581+15	0977' ED52    	        SBC     HL,DE
+1681:10596+4	0979' B7      	        OR      A
+1682:10600+12	097A' 18DC    	        JR      MOD482
+1683:				;
+1684:10612+4	097C' 3C      	MOD484: INC     A
+1685:10616+4	097D' 59      	MOD485: LD      E,C             ;QUOTIENT
+1686:10620+4	097E' 4F      	        LD      C,A             ;REMAINDER EXPONENT
+1687:10624+4	097F' D9      	        EXX
+1688:10628+10	0980' C1      	        POP     BC
+1689:10638+4	0981' D9      	        EXX
+1690:10642+8	0982' CB7C    	FLO48:  BIT     7,H
+1691:10650+5+6	0984' C0      	        RET     NZ
+1692:10655+4	0985' D9      	        EXX
+1693:10659+8	0986' CB21    	        SLA     C
+1694:10667+8	0988' CB10    	        RL      B
+1695:10675+15	098A' ED6A    	        ADC     HL,HL
+1696:10690+4	098C' D9      	        EXX
+1697:10694+15	098D' ED6A    	        ADC     HL,HL
+1698:10709+4	098F' 0D      	        DEC     C
+1699:10713+10	0990' C28209  	        JP      NZ,FLO48
+1700:10723+10	0993' C9      	        RET
+1701:				;
+1702:				;Float unsigned number
+1703:				;    Input/output in HLH'L'C
+1704:				;   Destroys: C,H,L,H',L',F
+1705:				;
+1706:10733+8	0994' CB7C    	FLOAT:  BIT     7,H
+1707:10741+5+6	0996' C0      	        RET     NZ
+1708:10746+4	0997' D9      	        EXX                     ;SAME AS "X2"
+1709:10750+11	0998' 29      	        ADD     HL,HL           ;TIME-CRITICAL
+1710:10761+4	0999' D9      	        EXX                     ;REGION
+1711:10765+15	099A' ED6A    	        ADC     HL,HL           ;(BENCHMARKS)
+1712:10780+4	099C' 0D      	        DEC     C
+1713:10784+10	099D' C29409  	        JP      NZ,FLOAT
+1714:10794+10	09A0' C9      	        RET
+1715:				;
+1716:				;SFLOAT - Convert to floating-point if necessary.
+1717:				;    Input: Variable-type number in HLH'L'C
+1718:				;    Output: Floating-point in HLH'L'C
+1719:				;    Destroys: A,C,H,L,H',L',F
+1720:				;
+1721:10804+4	09A1' 08      	FLOATA: EX      AF,AF'
+1722:10808+7	09A2' C62A    	        ADD     A,(RTABLE-DTABLE)/2
+1723:10815+4	09A4' 08      	        EX      AF,AF'
+1724:10819+17	09A5' CDD809  	FLOAT2: CALL    SWAP
+1725:10836+17	09A8' CDAE09  	        CALL    SFLOAT
+1726:10853+17	09AB' CDD809  	        CALL    SWAP
+1727:10870+4	09AE' 0D      	SFLOAT: DEC     C
+1728:10874+4	09AF' 0C      	        INC     C
+1729:10878+5+6	09B0' C0      	        RET     NZ              ;ALREADY FLOATING-POINT
+1730:10883+17	09B1' CDFD09  	        CALL    TEST
+1731:10900+5+6	09B4' C8      	        RET     Z               ;ZERO
+1732:10905+4	09B5' 7C      	        LD      A,H
+1733:10909+4	09B6' B7      	        OR      A
+1734:10913+10+7	09B7' FC0109  	        CALL    M,NEGATE
+1735:10923+7	09BA' 0E9F    	        LD      C,159
+1736:10930+17	09BC' CD9409  	        CALL    FLOAT
+1737:10947+4	09BF' B7      	        OR      A
+1738:10951+5+6	09C0' F8      	        RET     M               ;NEGATIVE
+1739:10956+8	09C1' CBBC    	        RES     7,H
+1740:10964+10	09C3' C9      	        RET
+1741:				;
+1742:				;ROUND UP
+1743:				;Return with carry set if 32-bit overflow
+1744:				;   Destroys: H,L,B',C',H',L',F
+1745:				;
+1746:10974+4	09C4' D9      	ADD1:   EXX
+1747:10978+10	09C5' 010100  	        LD      BC,1
+1748:10988+11	09C8' 09      	        ADD     HL,BC
+1749:10999+4	09C9' D9      	        EXX
+1750:11003+5+6	09CA' D0      	        RET     NC
+1751:11008+11	09CB' C5      	        PUSH    BC
+1752:11019+10	09CC' 010100  	        LD      BC,1
+1753:11029+11	09CF' 09      	        ADD     HL,BC
+1754:11040+10	09D0' C1      	        POP     BC
+1755:11050+10	09D1' C9      	        RET
+1756:				;
+1757:				;ODD - Add one if even, leave alone if odd.
+1758:				; (Used to perform unbiassed rounding, i.e.
+1759:				;  number is rounded up half the time)
+1760:				;    Destroys: L',F (carry cleared)
+1761:				;
+1762:11060+4	09D2' B7      	ODD:    OR      A               ;CLEAR CARRY
+1763:11064+4	09D3' D9      	        EXX
+1764:11068+8	09D4' CBC5    	        SET     0,L             ;MAKE ODD
+1765:11076+4	09D6' D9      	        EXX
+1766:11080+10	09D7' C9      	        RET
+1767:				;
+1768:				;SWAP - Swap arguments.
+1769:				;    Exchanges DE,HL D'E',H'L' and B,C
+1770:				;    Destroys: A,B,C,D,E,H,L,D',E',H',L'
+1771:				;SWAP1 - Swap DEHL with D'E'H'L'
+1772:				;    Destroys: D,E,H,L,D',E',H',L'
+1773:				;
+1774:11090+4	09D8' 79      	SWAP:   LD      A,C
+1775:11094+4	09D9' 48      	        LD      C,B
+1776:11098+4	09DA' 47      	        LD      B,A
+1777:11102+4	09DB' EB      	SWAP1:  EX      DE,HL
+1778:11106+4	09DC' D9      	        EXX
+1779:11110+4	09DD' EB      	        EX      DE,HL
+1780:11114+4	09DE' D9      	        EXX
+1781:11118+10	09DF' C9      	        RET
+1782:				;
+1783:				;DIV2 - destroys C,H,L,A',B',C',H',L',F,F'
+1784:				;INCC - destroys C,F
+1785:				;OFLOW
+1786:				;
+1787:11128+17	09E0' CD7E0A  	DIV2:   CALL    D2
+1788:11145+4	09E3' D9      	        EXX
+1789:11149+8	09E4' CB18    	        RR      B
+1790:11157+8	09E6' CB19    	        RR      C
+1791:11165+4	09E8' 08      	        EX      AF,AF'
+1792:11169+4	09E9' B0      	        OR      B
+1793:11173+4	09EA' 08      	        EX      AF,AF'
+1794:11177+4	09EB' D9      	        EXX
+1795:11181+4	09EC' 0C      	INCC:   INC     C
+1796:11185+5+6	09ED' C0      	        RET     NZ
+1797:11190+7	09EE' 3E14    	OFLOW:  LD      A,TOOBIG
+1798:11197+10	09F0' C31100  	        JP      ERROR           ;"Too big"
+1799:				;
+1800:				;FTEST - Test for zero & sign
+1801:				;    Output: A=0 if zero, A=&40 if +ve, A=&C0 if -ve
+1802:				;
+1803:11207+17	09F3' CDFD09  	FTEST:  CALL    TEST
+1804:11224+5+6	09F6' C8      	        RET     Z
+1805:11229+4	09F7' 7C      	        LD      A,H
+1806:11233+7	09F8' E680    	        AND     10000000B
+1807:11240+7	09FA' F640    	        OR      01000000B
+1808:11247+10	09FC' C9      	        RET
+1809:				;
+1810:				;TEST - Test HLH'L' for zero.
+1811:				;    Output: Z-flag set & A=0 if HLH'L'=0
+1812:				;    Destroys: A,F
+1813:				;
+1814:11257+4	09FD' 7C      	TEST:   LD      A,H
+1815:11261+4	09FE' B5      	        OR      L
+1816:11265+4	09FF' D9      	        EXX
+1817:11269+4	0A00' B4      	        OR      H
+1818:11273+4	0A01' B5      	        OR      L
+1819:11277+4	0A02' D9      	        EXX
+1820:11281+10	0A03' C9      	        RET
+1821:				;
+1822:				;FCOMP - Compare two numbers
+1823:				;    Output: A=0 if equal, A=&40 if L>R, A=&C0 if L<R
+1824:				;
+1825:11291+4	0A04' 78      	FCOMP:  LD      A,B
+1826:11295+4	0A05' B1      	        OR      C               ;Both integer?
+1827:11299+7+5	0A06' 200A    	        JR      NZ,FCOMP1
+1828:11306+17	0A08' CD1A0A  	        CALL    ICP
+1829:11323+7	0A0B' 3E00    	FCOMP0: LD      A,0
+1830:11330+5+6	0A0D' C8      	        RET     Z               ;Equal
+1831:11335+7	0A0E' 3E80    	        LD      A,80H
+1832:11342+4	0A10' 1F      	        RRA
+1833:11346+10	0A11' C9      	        RET
+1834:				;
+1835:11356+17	0A12' CDA509  	FCOMP1: CALL    FLOAT2          ;Float both
+1836:11373+17	0A15' CD270A  	        CALL    FCP
+1837:11390+12	0A18' 18F1    	        JR      FCOMP0
+1838:				;
+1839:				;Integer and floating point compare.
+1840:				;Sets carry & zero flags according to HLH'L'C-DED'E'B
+1841:				;Result pre-set to FALSE
+1842:				;ICP1, FCP1 destroy A,F
+1843:				;
+1844:				;ZERO - Return zero.
+1845:				; Destroys: A,C,H,L,H',L'
+1846:				;
+1847:11402+17	0A1A' CD460A  	ICP:    CALL    ICP1
+1848:11419+7	0A1D' 3E00    	ZERO:   LD      A,0
+1849:11426+4	0A1F' D9      	        EXX
+1850:11430+4	0A20' 67      	        LD      H,A
+1851:11434+4	0A21' 6F      	        LD      L,A
+1852:11438+4	0A22' D9      	        EXX
+1853:11442+4	0A23' 67      	        LD      H,A
+1854:11446+4	0A24' 6F      	        LD      L,A
+1855:11450+4	0A25' 4F      	        LD      C,A
+1856:11454+10	0A26' C9      	        RET
+1857:				;
+1858:11464+17	0A27' CD390A  	FCP:    CALL    FCP1
+1859:11481+12	0A2A' 18F1    	        JR      ZERO            ;PRESET FALSE
+1860:				;
+1861:11493+4	0A2C' 79      	FCP0:   LD      A,C
+1862:11497+4	0A2D' B8      	        CP      B               ;COMPARE EXPONENTS
+1863:11501+5+6	0A2E' C0      	        RET     NZ
+1864:11506+15	0A2F' ED52    	ICP0:   SBC     HL,DE           ;COMP MANTISSA MSB
+1865:11521+11	0A31' 19      	        ADD     HL,DE
+1866:11532+5+6	0A32' C0      	        RET     NZ
+1867:11537+4	0A33' D9      	        EXX
+1868:11541+15	0A34' ED52    	        SBC     HL,DE           ;COMP MANTISSA LSB
+1869:11556+11	0A36' 19      	        ADD     HL,DE
+1870:11567+4	0A37' D9      	        EXX
+1871:11571+10	0A38' C9      	        RET
+1872:				;
+1873:11581+4	0A39' 7C      	FCP1:   LD      A,H
+1874:11585+4	0A3A' AA      	        XOR     D
+1875:11589+4	0A3B' 7C      	        LD      A,H
+1876:11593+4	0A3C' 17      	        RLA
+1877:11597+5+6	0A3D' F8      	        RET     M
+1878:11602+7+5	0A3E' 30EC    	        JR      NC,FCP0
+1879:11609+17	0A40' CD2C0A  	        CALL    FCP0
+1880:11626+5+6	0A43' C8      	        RET     Z               ;** V0.1 BUG FIX
+1881:11631+4	0A44' 3F      	        CCF
+1882:11635+10	0A45' C9      	        RET
+1883:				;
+1884:11645+4	0A46' 7C      	ICP1:   LD      A,H
+1885:11649+4	0A47' AA      	        XOR     D
+1886:11653+10	0A48' F22F0A  	        JP      P,ICP0
+1887:11663+4	0A4B' 7C      	        LD      A,H
+1888:11667+4	0A4C' 17      	        RLA
+1889:11671+10	0A4D' C9      	        RET
+1890:				;
+1891:				;ADD - Integer add.
+1892:				;Carry, sign & zero flags valid on exit
+1893:				;    Destroys: H,L,H',L',F
+1894:				;
+1895:11681+4	0A4E' 05      	X10B:   DEC     B
+1896:11685+4	0A4F' 0C      	        INC     C
+1897:11689+17	0A50' CD8A0A  	X5:     CALL    COPY0
+1898:11706+17	0A53' CD7D0A  	        CALL    D2C
+1899:11723+17	0A56' CD7D0A  	        CALL    D2C
+1900:11740+4	0A59' 08      	        EX      AF,AF'          ;SAVE CARRY
+1901:11744+4	0A5A' D9      	ADD:    EXX
+1902:11748+11	0A5B' 19      	        ADD     HL,DE
+1903:11759+4	0A5C' D9      	        EXX
+1904:11763+15	0A5D' ED5A    	        ADC     HL,DE
+1905:11778+10	0A5F' C9      	        RET
+1906:				;
+1907:				;SUB - Integer subtract.
+1908:				;Carry, sign & zero flags valid on exit
+1909:				;    Destroys: H,L,H',L',F
+1910:				;
+1911:11788+4	0A60' D9      	SUB:    EXX
+1912:11792+4	0A61' B7      	        OR      A
+1913:11796+15	0A62' ED52    	        SBC     HL,DE
+1914:11811+4	0A64' D9      	        EXX
+1915:11815+15	0A65' ED52    	        SBC     HL,DE
+1916:11830+10	0A67' C9      	        RET
+1917:				;
+1918:				;X10 - unsigned integer * 10
+1919:				;   Inputs: HLH'L' initial value
+1920:				;  Outputs: DED'E' = initial HLH'L'
+1921:				;           Carry bit set if overflow
+1922:				;           If carry not set HLH'L'=result
+1923:				; Destroys: D,E,H,L,D',E',H',L',F
+1924:				;X2 - Multiply HLH'L' by 2 as 32-bit integer.
+1925:				;    Carry set if MSB=1 before shift.
+1926:				;    Sign set if MSB=1 after shift.
+1927:				;    Destroys: H,L,H',L',F
+1928:				;
+1929:11840+17	0A68' CD8A0A  	X10:    CALL    COPY0           ;DED'E'=HLH'L'
+1930:11857+17	0A6B' CD770A  	        CALL    X2
+1931:11874+5+6	0A6E' D8      	        RET     C               ;TOO BIG
+1932:11879+17	0A6F' CD770A  	        CALL    X2
+1933:11896+5+6	0A72' D8      	        RET     C
+1934:11901+17	0A73' CD5A0A  	        CALL    ADD
+1935:11918+5+6	0A76' D8      	        RET     C
+1936:11923+4	0A77' D9      	X2:     EXX
+1937:11927+11	0A78' 29      	        ADD     HL,HL
+1938:11938+4	0A79' D9      	        EXX
+1939:11942+15	0A7A' ED6A    	        ADC     HL,HL
+1940:11957+10	0A7C' C9      	        RET
+1941:				;
+1942:				;D2 - Divide HLH'L' by 2 as 32-bit integer.
+1943:				;    Carry set if LSB=1 before shift.
+1944:				;    Destroys: H,L,H',L',F
+1945:				;
+1946:11967+4	0A7D' 0C      	D2C:    INC     C
+1947:11971+8	0A7E' CB3C    	D2:     SRL     H
+1948:11979+8	0A80' CB1D    	        RR      L
+1949:11987+4	0A82' D9      	        EXX
+1950:11991+8	0A83' CB1C    	        RR      H
+1951:11999+8	0A85' CB1D    	        RR      L
+1952:12007+4	0A87' D9      	        EXX
+1953:12011+10	0A88' C9      	        RET
+1954:				;
+1955:				;COPY - COPY HLH'L'C INTO DED'E'B
+1956:				;  Destroys: B,C,D,E,H,L,D',E',H',L'
+1957:				;
+1958:12021+4	0A89' 41      	COPY:   LD      B,C
+1959:12025+4	0A8A' 54      	COPY0:  LD      D,H
+1960:12029+4	0A8B' 5D      	        LD      E,L
+1961:12033+4	0A8C' D9      	        EXX
+1962:12037+4	0A8D' 54      	        LD      D,H
+1963:12041+4	0A8E' 5D      	        LD      E,L
+1964:12045+4	0A8F' D9      	        EXX
+1965:12049+10	0A90' C9      	        RET
+1966:				;
+1967:				;SQUARE - PUSH X*X
+1968:				;PUSH5 - PUSH HLH'L'C ONTO STACK.
+1969:				;  Destroys: SP,IX
+1970:				;
+1971:12059+17	0A91' CD890A  	SQUARE: CALL    COPY
+1972:12076+17	0A94' CD2902  	        CALL    FMUL
+1973:12093+14	0A97' DDE1    	PUSH5:  POP     IX              ;RETURN ADDRESS
+1974:12107+11	0A99' C5      	        PUSH    BC
+1975:12118+11	0A9A' E5      	        PUSH    HL
+1976:12129+4	0A9B' D9      	        EXX
+1977:12133+11	0A9C' E5      	        PUSH    HL
+1978:12144+4	0A9D' D9      	        EXX
+1979:12148+8	0A9E' DDE9    	        JP      (IX)            ;"RETURN"
+1980:				;
+1981:				;POP5 - POP DED'E'B OFF STACK.
+1982:				;  Destroys: A,B,D,E,D',E',SP,IX
+1983:				;
+1984:12156+14	0AA0' DDE1    	POP5:   POP     IX              ;RETURN ADDRESS
+1985:12170+4	0AA2' D9      	        EXX
+1986:12174+10	0AA3' D1      	        POP     DE
+1987:12184+4	0AA4' D9      	        EXX
+1988:12188+10	0AA5' D1      	        POP     DE
+1989:12198+4	0AA6' 79      	        LD      A,C
+1990:12202+10	0AA7' C1      	        POP     BC
+1991:12212+4	0AA8' 41      	        LD      B,C
+1992:12216+4	0AA9' 4F      	        LD      C,A
+1993:12220+8	0AAA' DDE9    	        JP      (IX)            ;"RETURN"
+1994:				;
+1995:				;RATIO - Calculate (X-1)/(X+1)
+1996:				;    Inputs: X in HLH'L'C
+1997:				;   Outputs: (X-1)/(X+1) in HLH'L'C
+1998:				;  Destroys: Everything except IY,SP,I
+1999:				;
+2000:12228+17	0AAC' CD970A  	RATIO:  CALL    PUSH5           ;SAVE X
+2001:12245+17	0AAF' CDEC04  	        CALL    DONE
+2002:12262+17	0AB2' CD3E01  	        CALL    FADD
+2003:12279+17	0AB5' CDA00A  	        CALL    POP5            ;RESTORE X
+2004:12296+17	0AB8' CD970A  	        CALL    PUSH5           ;SAVE X+1
+2005:12313+17	0ABB' CDD809  	        CALL    SWAP
+2006:12330+17	0ABE' CDEC04  	        CALL    DONE
+2007:12347+17	0AC1' CD2801  	        CALL    FSUB
+2008:12364+17	0AC4' CDA00A  	        CALL    POP5            ;RESTORE X+1
+2009:12381+10	0AC7' C39601  	        JP      FDIV
+2010:				;
+2011:				;POLY - Evaluate a polynomial.
+2012:				;    Inputs: X in HLH'L'C and also stored at (SP+2)
+2013:				;            Polynomial coefficients follow call.
+2014:				;   Outputs: Result in HLH'L'C
+2015:				;  Destroys: Everything except IY,SP,I
+2016:				;Routine terminates on finding a coefficient >=1.
+2017:				;Note: The last coefficient is EXECUTED on return
+2018:				;      so must contain only innocuous bytes!
+2019:				;
+2020:12391+14	0ACA' DD210200	POLY:   LD      IX,2
+2021:12405+15	0ACE' DD39    	        ADD     IX,SP
+2022:12420+23	0AD0' DDE3    	        EX      (SP),IX
+2023:12443+17	0AD2' CD1D08  	        CALL    DLOAD5          ;FIRST COEFFICIENT
+2024:12460+17	0AD5' CD2902  	POLY1:  CALL    FMUL
+2025:12477+10	0AD8' 110500  	        LD      DE,5
+2026:12487+15	0ADB' DD19    	        ADD     IX,DE
+2027:12502+17	0ADD' CD1D08  	        CALL    DLOAD5          ;NEXT COEFFICIENT
+2028:12519+23	0AE0' DDE3    	        EX      (SP),IX
+2029:12542+4	0AE2' 04      	        INC     B
+2030:12546+4	0AE3' 05      	        DEC     B               ;TEST
+2031:12550+10	0AE4' FA3E01  	        JP      M,FADD
+2032:12560+17	0AE7' CD3E01  	        CALL    FADD
+2033:12577+17	0AEA' CD1D08  	        CALL    DLOAD5          ;X
+2034:12594+23	0AED' DDE3    	        EX      (SP),IX
+2035:12617+12	0AEF' 18E4    	        JR      POLY1
+2036:				;
+2037:				;POWR10 - Calculate power of ten.
+2038:				;    Inputs: A=power of 10 required (A<128)
+2039:				;            A=binary exponent to be exceeded (A>=128)
+2040:				;   Outputs: DED'E'B = result
+2041:				;            A = actual power of ten returned
+2042:				;  Destroys: A,B,D,E,A',D',E',F,F'
+2043:				;
+2044:12629+4	0AF1' 3C      	POWR10: INC     A
+2045:12633+4	0AF2' 08      	        EX      AF,AF'
+2046:12637+11	0AF3' E5      	        PUSH    HL
+2047:12648+4	0AF4' D9      	        EXX
+2048:12652+11	0AF5' E5      	        PUSH    HL
+2049:12663+4	0AF6' D9      	        EXX
+2050:12667+17	0AF7' CDEC04  	        CALL    DONE
+2051:12684+17	0AFA' CDD809  	        CALL    SWAP
+2052:12701+4	0AFD' AF      	        XOR     A
+2053:12705+4	0AFE' 08      	POWR11: EX      AF,AF'
+2054:12709+4	0AFF' 3D      	        DEC     A
+2055:12713+7+5	0B00' 2820    	        JR      Z,POWR14        ;EXIT TYPE 1
+2056:12720+10	0B02' F2090B  	        JP      P,POWR13
+2057:12730+4	0B05' B9      	        CP      C
+2058:12734+7+5	0B06' 381A    	        JR      C,POWR14        ;EXIT TYPE 2
+2059:12741+4	0B08' 3C      	        INC     A
+2060:12745+4	0B09' 08      	POWR13: EX      AF,AF'
+2061:12749+4	0B0A' 3C      	        INC     A
+2062:12753+8	0B0B' CBFC    	        SET     7,H
+2063:12761+17	0B0D' CD500A  	        CALL    X5
+2064:12778+7+5	0B10' 3005    	        JR      NC,POWR12
+2065:12785+4	0B12' 08      	        EX      AF,AF'
+2066:12789+17	0B13' CD7D0A  	        CALL    D2C
+2067:12806+4	0B16' 08      	        EX      AF,AF'
+2068:12810+4	0B17' 08      	POWR12: EX      AF,AF'
+2069:12814+10+7	0B18' DCC409  	        CALL    C,ADD1          ;ROUND UP
+2070:12824+4	0B1B' 0C      	        INC     C
+2071:12828+10	0B1C' FAFE0A  	        JP      M,POWR11
+2072:12838+10	0B1F' C3EE09  	        JP      OFLOW
+2073:12848+17	0B22' CDD809  	POWR14: CALL    SWAP
+2074:12865+8	0B25' CBBA    	        RES     7,D
+2075:12873+4	0B27' D9      	        EXX
+2076:12877+10	0B28' E1      	        POP     HL
+2077:12887+4	0B29' D9      	        EXX
+2078:12891+10	0B2A' E1      	        POP     HL
+2079:12901+4	0B2B' 08      	        EX      AF,AF'
+2080:12905+10	0B2C' C9      	        RET
+2081:				;
+2082:				;DIVA, DIVB - DIVISION PRIMITIVE.
+2083:				;    Function: D'E'DE = H'L'HLD'E'DE / B'C'BC
+2084:				;              Remainder in H'L'HL
+2085:				;    Inputs: A = loop counter (normally -32)
+2086:				;    Destroys: A,D,E,H,L,D',E',H',L',F
+2087:				;
+2088:12915+4	0B2D' B7      	DIVA:   OR      A               ;CLEAR CARRY
+2089:12919+15	0B2E' ED42    	DIV0:   SBC     HL,BC           ;DIVIDEND-DIVISOR
+2090:12934+4	0B30' D9      	        EXX
+2091:12938+15	0B31' ED42    	        SBC     HL,BC
+2092:12953+4	0B33' D9      	        EXX
+2093:12957+7+5	0B34' 3005    	        JR      NC,DIV1
+2094:12964+11	0B36' 09      	        ADD     HL,BC           ;DIVIDEND+DIVISOR
+2095:12975+4	0B37' D9      	        EXX
+2096:12979+15	0B38' ED4A    	        ADC     HL,BC
+2097:12994+4	0B3A' D9      	        EXX
+2098:12998+4	0B3B' 3F      	DIV1:   CCF
+2099:13002+8	0B3C' CB13    	DIVC:   RL      E               ;SHIFT RESULT INTO DE
+2100:13010+8	0B3E' CB12    	        RL      D
+2101:13018+4	0B40' D9      	        EXX
+2102:13022+8	0B41' CB13    	        RL      E
+2103:13030+8	0B43' CB12    	        RL      D
+2104:13038+4	0B45' D9      	        EXX
+2105:13042+4	0B46' 3C      	        INC     A
+2106:13046+5+6	0B47' F0      	        RET     P
+2107:13051+15	0B48' ED6A    	DIVB:   ADC     HL,HL           ;DIVIDEND*2
+2108:13066+4	0B4A' D9      	        EXX
+2109:13070+15	0B4B' ED6A    	        ADC     HL,HL
+2110:13085+4	0B4D' D9      	        EXX
+2111:13089+7+5	0B4E' 30DE    	        JR      NC,DIV0
+2112:13096+4	0B50' B7      	        OR      A
+2113:13100+15	0B51' ED42    	        SBC     HL,BC           ;DIVIDEND-DIVISOR
+2114:13115+4	0B53' D9      	        EXX
+2115:13119+15	0B54' ED42    	        SBC     HL,BC
+2116:13134+4	0B56' D9      	        EXX
+2117:13138+4	0B57' 37      	        SCF
+2118:13142+10	0B58' C33C0B  	        JP      DIVC
+2119:				;
+2120:				;MULA, MULB - MULTIPLICATION PRIMITIVE.
+2121:				;    Function: H'L'HLD'E'DE = B'C'BC * D'E'DE
+2122:				;    Inputs: A = loop counter (usually -32)
+2123:				;            H'L'HL = 0
+2124:				;    Destroys: D,E,H,L,D',E',H',L',A,F
+2125:				;
+2126:13152+4	0B5B' B7      	MULA:   OR      A               ;CLEAR CARRY
+2127:13156+4	0B5C' D9      	MUL0:   EXX
+2128:13160+8	0B5D' CB1A    	        RR      D               ;MULTIPLIER/2
+2129:13168+8	0B5F' CB1B    	        RR      E
+2130:13176+4	0B61' D9      	        EXX
+2131:13180+8	0B62' CB1A    	        RR      D
+2132:13188+8	0B64' CB1B    	        RR      E
+2133:13196+7+5	0B66' 3005    	        JR      NC,MUL1
+2134:13203+11	0B68' 09      	        ADD     HL,BC           ;ADD IN MULTIPLICAND
+2135:13214+4	0B69' D9      	        EXX
+2136:13218+15	0B6A' ED4A    	        ADC     HL,BC
+2137:13233+4	0B6C' D9      	        EXX
+2138:13237+4	0B6D' 3C      	MUL1:   INC     A
+2139:13241+5+6	0B6E' F0      	        RET     P
+2140:13246+4	0B6F' D9      	MULB:   EXX
+2141:13250+8	0B70' CB1C    	        RR      H               ;PRODUCT/2
+2142:13258+8	0B72' CB1D    	        RR      L
+2143:13266+4	0B74' D9      	        EXX
+2144:13270+8	0B75' CB1C    	        RR      H
+2145:13278+8	0B77' CB1D    	        RR      L
+2146:13286+10	0B79' C35C0B  	        JP      MUL0
+2147:				;
+2148:				;SQRA, SQRB - SQUARE ROOT PRIMITIVES
+2149:				;    Function: B'C'BC = SQR (D'E'DE)
+2150:				;    Inputs: A = loop counter (normally -31)
+2151:				;            B'C'BCH'L'HL initialised to 0
+2152:				;  Destroys: A,B,C,D,E,H,L,B',C',D',E',H',L',F
+2153:				;
+2154:13296+15	0B7C' ED42    	SQR1:   SBC     HL,BC
+2155:13311+4	0B7E' D9      	        EXX
+2156:13315+15	0B7F' ED42    	        SBC     HL,BC
+2157:13330+4	0B81' D9      	        EXX
+2158:13334+4	0B82' 0C      	        INC     C
+2159:13338+7+5	0B83' 3007    	        JR      NC,SQR2
+2160:13345+4	0B85' 0D      	        DEC     C
+2161:13349+11	0B86' 09      	        ADD     HL,BC
+2162:13360+4	0B87' D9      	        EXX
+2163:13364+15	0B88' ED4A    	        ADC     HL,BC
+2164:13379+4	0B8A' D9      	        EXX
+2165:13383+4	0B8B' 0D      	        DEC     C
+2166:13387+4	0B8C' 3C      	SQR2:   INC     A
+2167:13391+5+6	0B8D' F0      	        RET     P
+2168:13396+8	0B8E' CB21    	SQRA:   SLA     C
+2169:13404+8	0B90' CB10    	        RL      B
+2170:13412+4	0B92' D9      	        EXX
+2171:13416+8	0B93' CB11    	        RL      C
+2172:13424+8	0B95' CB10    	        RL      B
+2173:13432+4	0B97' D9      	        EXX
+2174:13436+4	0B98' 0C      	        INC     C
+2175:13440+8	0B99' CB23    	        SLA     E
+2176:13448+8	0B9B' CB12    	        RL      D
+2177:13456+4	0B9D' D9      	        EXX
+2178:13460+8	0B9E' CB13    	        RL      E
+2179:13468+8	0BA0' CB12    	        RL      D
+2180:13476+4	0BA2' D9      	        EXX
+2181:13480+15	0BA3' ED6A    	        ADC     HL,HL
+2182:13495+4	0BA5' D9      	        EXX
+2183:13499+15	0BA6' ED6A    	        ADC     HL,HL
+2184:13514+4	0BA8' D9      	        EXX
+2185:13518+8	0BA9' CB23    	        SLA     E
+2186:13526+8	0BAB' CB12    	        RL      D
+2187:13534+4	0BAD' D9      	        EXX
+2188:13538+8	0BAE' CB13    	        RL      E
+2189:13546+8	0BB0' CB12    	        RL      D
+2190:13554+4	0BB2' D9      	        EXX
+2191:13558+15	0BB3' ED6A    	        ADC     HL,HL
+2192:13573+4	0BB5' D9      	        EXX
+2193:13577+15	0BB6' ED6A    	        ADC     HL,HL
+2194:13592+4	0BB8' D9      	        EXX
+2195:13596+10	0BB9' D27C0B  	        JP      NC,SQR1
+2196:13606+4	0BBC' B7      	SQR3:   OR      A
+2197:13610+15	0BBD' ED42    	        SBC     HL,BC
+2198:13625+4	0BBF' D9      	        EXX
+2199:13629+15	0BC0' ED42    	        SBC     HL,BC
+2200:13644+4	0BC2' D9      	        EXX
+2201:13648+4	0BC3' 0C      	        INC     C
+2202:13652+10	0BC4' C38C0B  	        JP      SQR2
+2203:				;
+2204:13662+11	0BC7' 29      	SQRB:   ADD     HL,HL
+2205:13673+4	0BC8' D9      	        EXX
+2206:13677+15	0BC9' ED6A    	        ADC     HL,HL
+2207:13692+4	0BCB' D9      	        EXX
+2208:13696+7+5	0BCC' 38EE    	        JR      C,SQR3
+2209:13703+4	0BCE' 3C      	        INC     A
+2210:13707+4	0BCF' 0C      	        INC     C
+2211:13711+15	0BD0' ED42    	        SBC     HL,BC
+2212:13726+4	0BD2' D9      	        EXX
+2213:13730+15	0BD3' ED42    	        SBC     HL,BC
+2214:13745+4	0BD5' D9      	        EXX
+2215:13749+5+6	0BD6' D0      	        RET     NC
+2216:13754+11	0BD7' 09      	        ADD     HL,BC
+2217:13765+4	0BD8' D9      	        EXX
+2218:13769+15	0BD9' ED4A    	        ADC     HL,BC
+2219:13784+4	0BDB' D9      	        EXX
+2220:13788+4	0BDC' 0D      	        DEC     C
+2221:13792+10	0BDD' C9      	        RET
+2222:				;
+2223:13802+19	0BDE' DD7E00  	DIGITQ: LD      A,(IX)
+2224:13821+7	0BE1' FE3A    	        CP      '9'+1
+2225:13828+4	0BE3' 3F      	        CCF
+2226:13832+5+6	0BE4' D8      	        RET     C
+2227:13837+7	0BE5' FE30    	        CP      '0'
+2228:13844+10	0BE7' C9      	        RET
+2229:				;
+2230:13854+19	0BE8' DD7E00  	SIGNQ:  LD      A,(IX)
+2231:13873+10	0BEB' DD23    	        INC     IX
+2232:13883+7	0BED' FE20    	        CP      ' '
+2233:13890+7+5	0BEF' 28F7    	        JR      Z,SIGNQ
+2234:13897+7	0BF1' FE2B    	        CP      '+'
+2235:13904+5+6	0BF3' C8      	        RET     Z
+2236:13909+7	0BF4' FE2D    	        CP      '-'
+2237:13916+5+6	0BF6' C8      	        RET     Z
+2238:13921+10	0BF7' DD2B    	        DEC     IX
+2239:13931+10	0BF9' C9      	        RET
+2240:				;
+2241:     -	0BFA'         	        END
+
+
+
+Statistics:
+
+     4	passes
+     0	jr promotions
+   234	symbols
+  3066	bytes
+
+
+
+Symbol Table:
+
+ABS              367'     871
+ACLOST         =17        23
+ACS              6C3'     1731
+ACS1             6AE'     1710
+ADD              A5A'     2650
+ADD1             9C4'     2500
+ASN              61F'     1567
+ATN              644'     1604
+ATN0             647'     1607
+ATN1             672'     1650
+ATN2             677'     1655
+BAD             0F'       15
+BADOP          =01        1
+CHKO1            269'     617
+CHKO2            26C'     620
+CHKOVF           262'     610
+CON              82F'     2095
+CON0             851'     2129
+CON2             867'     2151
+CON3             875'     2165
+COPY             A89'     2697
+COPY0            A8A'     2698
+COS              45D'     1117
+COS0             460'     1120
+D2               A7E'     2686
+D2C              A7D'     2685
+DEG              391'     913
+DIGITQ           BDE'     3038
+DISPAT          26'       38
+DIV0             B2E'     2862
+DIV1             B3B'     2875
+DIV2             9E0'     2528
+DIVA             B2D'     2861
+DIVB             B48'     2888
+DIVBY0         =12        18
+DIVC             B3C'     2876
+DLOAD5           81D'     2077
+DONE             4EC'     1260
+DTABLE          37'       55
+ERROR           11'       17
+EXIT            0C'       12
+EXP              502'     1282
+EXP0             505'     1285
+EXP1             520'     1312
+EXP2             56E'     1390
+EXP3             571'     1393
+EXP4             564'     1380
+EXPRNG         =18        24
+FADD             13E'     318
+FADD3            16A'     362
+FADD4            174'     372
+FAND            AB'       171
+FBDIV            10E'     270
+FCOMP            A04'     2564
+FCOMP0           A0B'     2571
+FCOMP1           A12'     2578
+FCP              A27'     2599
+FCP0             A2C'     2604
+FCP1             A39'     2617
+FDIV             196'     406
+FEOR            BD'       189
+FEQ              353'     851
+FGE              330'     816
+FGT              324'     804
+FIX              8D9'     2265
+FIX1             8DE'     2270
+FIX2             8E9'     2281
+FLE              33B'     827
+FLO48            982'     2434
+FLOAT            994'     2452
+FLOAT2           9A5'     2469
+FLOATA           9A1'     2465
+FLT              319'     793
+FMOD            E1'       225
+FMUL             229'     553
+FNE              348'     840
+FONE             4E1'     1249
+FOR             CF'       207
+FPI180           3A1'     929
+FPOW             2EF'     751
+FPOW0            2EA'     746
+FPOW1            309'     777
+FPP             00'       0 (public)
+FSUB             128'     296
+FTABLE          57'       87
+FTEST            9F3'     2547
+GETEX1           88D'     2189
+GETEX2           8A9'     2217
+GETEXP           883'     2179
+IADD             134'     308
+IAND            AE'       174
+IBDIV            111'     273
+ICP              A1A'     2586
+ICP0             A2F'     2607
+ICP1             A46'     2630
+IDIV             193'     403
+IEOR            C0'       192
+IEQ              358'     856
+IEQ1             35B'     859
+IGE              335'     821
+IGE1             338'     824
+IGT              329'     809
+IGT1             32C'     812
+ILE              340'     832
+ILE1             343'     835
+ILT              31E'     798
+ILT1             321'     801
+IMOD            E4'       228
+IMUL             1DB'     475
+IMUL1            210'     528
+INCC             9EC'     2540
+INE              34D'     845
+INE1             350'     848
+INT              3D7'     983
+IOR             D2'       210
+IPOW             279'     633
+IPOW0            282'     642
+IPOW1            285'     645
+IPOW2            292'     658
+IPOW3            2C0'     704
+IPOW4            2E4'     740
+IPOW5            2DD'     733
+ISUB             11E'     286
+LN               58D'     1421
+LN0              590'     1424
+LN1              5EE'     1518
+LN2              582'     1410
+LN3              605'     1541
+LN4              5AE'     1454
+LOG              60D'     1549
+LOGRNG         =16        22
+MOD48            933'     2355
+MOD481           943'     2371
+MOD482           958'     2392
+MOD483           95F'     2399
+MOD484           97C'     2428
+MOD485           97D'     2429
+MUL0             B5C'     2908
+MUL1             B6D'     2925
+MULA             B5B'     2907
+MULB             B6F'     2927
+NEG              915'     2325
+NEG0             903'     2307
+NEGATE           901'     2305
+NGROOT         =15        21
+NOTK             372'     882
+NUMB1            8D3'     2259
+NUMBER           8B4'     2228
+NUMBIX           8B2'     2226
+ODD              9D2'     2514
+OFLOW            9EE'     2542
+OP              17'       23
+PI               385'     901
+PIBY4            4F7'     1271
+POLY             ACA'     2762
+POLY1            AD5'     2773
+POP5             AA0'     2720
+POWR10           AF1'     2801
+POWR11           AFE'     2814
+POWR12           B17'     2839
+POWR13           B09'     2825
+POWR14           B22'     2850
+PUSH5            A97'     2711
+RAD              399'     921
+RATIO            AAC'     2732
+RDIV             57C'     1404
+RECIP            579'     1401
+RSUB             12E'     302
+RTABLE          8B'       139
+SCALE            923'     2339
+SFIX             8F2'     2290
+SFLOAT           9AE'     2478
+SGN              3AF'     943
+SIGNQ            BE8'     3048
+SIN              468'     1128
+SIN0             46B'     1131
+SIN1             476'     1142
+SIN2             4B5'     1205
+SIN3             4D7'     1239
+SQR              3ED'     1005
+SQR0             3F0'     1008
+SQR1             B7C'     2940
+SQR2             B8C'     2956
+SQR3             BBC'     3004
+SQRA             B8E'     2958
+SQRB             BC7'     3015
+SQUARE           A91'     2705
+STR              6CB'     1739
+STR10            6DA'     1754
+STR11            6E0'     1760
+STR13            6F1'     1777
+STR14            700'     1792
+STR15            70F'     1807
+STR2             725'     1829
+STR20            736'     1846
+STR21            73E'     1854
+STR22            740'     1856
+STR23            74D'     1869
+STR24            763'     1891
+STR25            770'     1904
+STR26            778'     1912
+STR27            77B'     1915
+STR3             78B'     1931
+STR30            7A7'     1959
+STR31            7B0'     1968
+STR32            7C7'     1991
+STR33            7DE'     2014
+STR34            7CB'     1995
+STR35            7CE'     1998
+STR36            7D2'     2002
+STR37            7D8'     2008
+STR38            7E0'     2016
+STR39            7E7'     2023
+STR3A            7C2'     1986
+STR4             7EF'     2031
+STR40            7F0'     2032
+STR41            801'     2049
+STR42            80F'     2063
+STR43            818'     2072
+STR44            81B'     2075
+STR47            81A'     2074
+SUB              A60'     2656
+SWAP             9D8'     2520
+SWAP1            9DB'     2523
+TAN              440'     1088
+TEST             9FD'     2557
+TOOBIG         =14        20
+TRUE             35C'     860
+VAL              3BF'     959
+X10              A68'     2664
+X10B             A4E'     2638
+X2               A77'     2679
+X5               A50'     2640
+ZERO             A1D'     2589
